@@ -12,15 +12,28 @@ impl Url {
         use UrlError::*;
 
         let url = v.to_string();
-        if let Some(host) = url.split("://").nth(1) {
-            let host = host.split('/').next().unwrap().to_string();
-            Ok(Url {
-                url: url.to_string(),
-                host 
-            })
-        } else {
-            Err(NotValidUrl)
-        }
+        let mut url_split = url.split("://"); 
+        match url_split.next() {
+            Some(v) => {
+                if v.is_empty(){
+                    return Err(NoProtocol);
+                }
+            },
+            None => return Err(NotValidUrl),
+        };
+
+        let host = match url_split.next() {
+            Some(host) => host.split('/').next().unwrap().to_string(),
+            None => return Err(NotValidUrl),
+        };
+        Ok(Url {
+            url: url.to_string(),
+            host, 
+        })
+    }
+    /// Get the protocol of the url before the `://`
+    fn get_protocol(&self) -> &str {
+        self.url.split("://").next().unwrap()
     }
 }
 
@@ -36,6 +49,7 @@ mod errors {
     #[derive(Debug)]
     pub enum UrlError {
         NotValidUrl,
+        NoProtocol,
     }
 
 }
@@ -53,10 +67,14 @@ mod tests {
 
         let url = Url::from(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
         assert_eq!(url.host, "www.youtube.com");
+        assert_eq!(url.get_protocol(), "https");
 
         assert!(Url::from(&"www.google.com").is_err());
         assert!(Url::from(&"http:/www.google.com").is_err());
         assert!(Url::from(&"http://www.rust-lang.org/").is_ok());
+    
+
+        assert!(Url::from(&"://www.rust-lang.org/").is_err());
 
     }
 }
