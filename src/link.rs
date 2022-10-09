@@ -122,5 +122,18 @@ mod tests {
         assert_eq!(links.len(), 2);
         assert_eq!(links[0].to_string(), "https://www.google.com");
         assert_eq!(links[1].to_string(), "https://www.youtube.com");
+
+        // No links
+        let content = r#"<a href="https:/www.google.com">Google</a>"#;
+        let links = get_links(content);
+        assert_eq!(links.len(), 0);
+
+        // Multiple protocols http, https, ftp
+        let content = r#"<a href="https://www.google.com">Google</a><a href="http://www.youtube.com">Youtube</a><a href="ftp://www.rust-lang.org">Rust</a>"#;
+        let links = get_links(content);
+        assert_eq!(links.len(), 3);
+        assert_eq!(links[0].to_string(), "https://www.google.com");
+        assert_eq!(links[1].to_string(), "http://www.youtube.com");
+        assert_eq!(links[2].to_string(), "ftp://www.rust-lang.org");
     }
 }
