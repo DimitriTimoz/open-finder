@@ -1,9 +1,8 @@
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 use crate::link::errors::UrlError;
 use core::fmt::Debug;
-use std::{collections::HashMap, hash::Hasher, hash::Hash, fmt::Display};
-
+use std::{collections::HashMap, fmt::Display, hash::Hash, hash::Hasher};
 
 #[derive(Clone, PartialOrd, Ord)]
 pub struct Url {
@@ -116,15 +115,17 @@ pub fn get_links(content: &str) -> HashMap<Url, ()> {
             }
         }
         for j in i..end {
-            if content_p[j] == b' ' || content_p[j] == b'"' || content_p[j] == b'\'' {
+            let escape = b" \"'()<>\r";
+            if escape.contains(&content_p[j]) {
                 end = j;
                 break;
             } else {
                 end = j;
             }
         }
-        let link = Url::parse(&content[start..end].to_string()).unwrap();
-        links.insert(link, ());
+        if let Ok(link) =  Url::parse(&content[start..end].to_string()) {
+            links.insert(link, ());
+        }
         links.extend(get_links(&content[end..]));
     }
     links
@@ -151,7 +152,10 @@ mod tests {
 
         assert!(Url::parse(&"://www.rust-lang.org/").is_err());
 
-        assert_eq!(Url::parse(&"https://www.google.com").unwrap(), Url::parse(&"https://www.google.com/").unwrap());
+        assert_eq!(
+            Url::parse(&"https://www.google.com").unwrap(),
+            Url::parse(&"https://www.google.com/").unwrap()
+        );
     }
 
     #[test]

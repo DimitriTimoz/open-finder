@@ -2,11 +2,11 @@ pub mod content;
 pub mod link;
 pub mod page;
 
-use console::{Term, style};
+use console::{style, Term};
 
-use crate::page::Page;
+use crate::{page::{PagesGraph}};
 
-const NAME_ASCII_ART : &str = r#"
+const NAME_ASCII_ART: &str = r#"
 ___  ____  _____ _   _          _____ ___ _   _ ____  _____ ____  
 / _ \|  _ \| ____| \ | |        |  ___|_ _| \ | |  _ \| ____|  _ \ 
 | | | | |_) |  _||  \| |        | |_   | ||  \| | | | |  _| | |_) |
@@ -19,10 +19,31 @@ async fn main() {
     term.clear_screen().unwrap();
     println!("{}", style(NAME_ASCII_ART).green());
     println!("\n");
-    println!("{} {} !", style("Welcome to").green(), style("Open Finder").red());
-    println!("{}", style("Please, enter a url to start crawling: ").green());
+    println!(
+        "{} {} !",
+        style("Welcome to").green(),
+        style("Open Finder").red()
+    );
+    println!(
+        "{}",
+        style("Please, enter a url to start crawling: ").green()
+    );
     let url = term.read_line().unwrap();
     let url = link::Url::parse(&url).unwrap();
-    let page = Page::new(url).await.unwrap();
-    println!("{:?}", page);
+
+    println!(
+        "{}",
+        style("Please, the maximum distance from the root: ").green()
+    );
+    let distance = term.read_line().unwrap();
+    let distance = distance.parse::<u8>().unwrap();
+    let mut graph = PagesGraph::new();
+    graph.fetch_form(url, distance).await;
+    let links = graph.get_links();
+    for link in &links {
+        println!("- {}", link);
+    }
+
+    println!("{}", style(links.len()).green());
+
 }

@@ -637,9 +637,9 @@ dependencies = [
 
 [[package]]
 name = "progress_bar"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b4be7cf2db9f2c65ff33764fa928b5b839d6343254627edf4f4d8de99655aaa"
+checksum = "2c8e8843722ce55deb442e7d6476a97c081b8485ea2807b031d160f592f99037"
 dependencies = [
  "lazy_static",
 ]

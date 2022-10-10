@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::link::{Url, get_links};
+use crate::link::{get_links, Url};
 
 pub enum ContentType {
     Html,
@@ -13,17 +13,12 @@ pub struct Content {
 }
 impl Content {
     pub fn new(bytes: String, kind: ContentType) -> Self {
-        Content {
-            bytes,
-            kind,
-        }
+        Content { bytes, kind }
     }
 
     pub fn get_links(&self) -> HashMap<Url, ()> {
         match self.kind {
-            ContentType::Html => {
-                get_links(&self.bytes)
-            }
+            ContentType::Html => get_links(&self.bytes),
             ContentType::Pdf => todo!("get links from pdf"),
         }
     }
