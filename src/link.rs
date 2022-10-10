@@ -1,10 +1,26 @@
-use std::fmt::Debug;
+use crate::link::errors::UrlError;
+use core::fmt::Debug;
+use std::collections::HashMap;
 
-use self::errors::UrlError;
 
+#[derive(Hash, Eq, PartialEq, Clone)]
 pub struct Url {
     url: String,
     host: String,
+}
+
+pub trait HackTraitVecUrlString {
+    fn to_string(&self) -> String;
+}
+
+impl HackTraitVecUrlString for HashMap<Url, ()> {
+    fn to_string(&self) -> String {
+        let mut string = String::new();
+        for (url, _) in self {
+            string.push_str(&format!(" - {} \n", &url.to_string()));
+        }
+        string
+    }
 }
 
 impl Url {
@@ -59,8 +75,8 @@ mod errors {
     }
 }
 
-pub fn get_links(content: &str) -> Vec<Url> {
-    let mut links = Vec::new();
+pub fn get_links(content: &str) -> HashMap<Url, ()> {
+    let mut links = HashMap::new();
     if let Some(i) = content.find("://") {
         let mut start = i;
         let content_p = content.as_bytes();
@@ -81,7 +97,7 @@ pub fn get_links(content: &str) -> Vec<Url> {
             }
         }
         let link = Url::parse(&content[start..end].to_string()).unwrap();
-        links.push(link);
+        links.insert(link, ());
         links.extend(get_links(&content[end..]));
     }
     links
@@ -114,14 +130,14 @@ mod tests {
         let content = r#"<a href="https://www.google.com">Google</a>"#;
         let links = get_links(content);
         assert_eq!(links.len(), 1);
-        assert_eq!(links[0].to_string(), "https://www.google.com");
+        assert!(links.contains_key(&Url::parse(&"https://www.google.com").unwrap()));
 
         // Check mutliple links
         let content = r#"<a href="https://www.google.com">Google</a><a href="https://www.youtube.com">Youtube</a>"#;
         let links = get_links(content);
         assert_eq!(links.len(), 2);
-        assert_eq!(links[0].to_string(), "https://www.google.com");
-        assert_eq!(links[1].to_string(), "https://www.youtube.com");
+        assert!(links.contains_key(&Url::parse(&"https://www.google.com").unwrap()));
+        assert!(links.contains_key(&Url::parse(&"https://www.youtube.com").unwrap()));
 
         // No links
         let content = r#"<a href="https:/www.google.com">Google</a>"#;
@@ -132,8 +148,8 @@ mod tests {
         let content = r#"<a href="https://www.google.com">Google</a><a href="http://www.youtube.com">Youtube</a><a href="ftp://www.rust-lang.org">Rust</a>"#;
         let links = get_links(content);
         assert_eq!(links.len(), 3);
-        assert_eq!(links[0].to_string(), "https://www.google.com");
-        assert_eq!(links[1].to_string(), "http://www.youtube.com");
-        assert_eq!(links[2].to_string(), "ftp://www.rust-lang.org");
+        assert!(links.contains_key(&Url::parse(&"https://www.google.com").unwrap()));
+        assert!(links.contains_key(&Url::parse(&"http://www.youtube.com").unwrap()));
+        assert!(links.contains_key(&Url::parse(&"ftp://www.rust-lang.org").unwrap()));
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::link::{Url, get_links};
 
 pub enum ContentType {
@@ -17,7 +19,7 @@ impl Content {
         }
     }
 
-    pub fn get_links(&self) -> Vec<Url> {
+    pub fn get_links(&self) -> HashMap<Url, ()> {
         match self.kind {
             ContentType::Html => {
                 get_links(&self.bytes)
