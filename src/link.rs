@@ -53,6 +53,7 @@ impl Url {
         use UrlError::*;
 
         let url = v.to_string();
+        let url = html_escape::decode_html_entities(&url).to_string();
         let url = url.trim_end_matches('/');
         let mut url_split = url.split("://");
         match url_split.next() {
@@ -115,7 +116,7 @@ pub fn get_links(content: &str) -> HashMap<Url, ()> {
             }
         }
         for j in i..end {
-            let escape = b" \"'()<>\r";
+            let escape = b"\n ,\"'()<>\r";
             if escape.contains(&content_p[j]) {
                 end = j;
                 break;

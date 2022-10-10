@@ -43,7 +43,7 @@ async fn main() {
     for link in &links {
         println!("- {}", link);
     }
-
+    graph.save_graph();
     println!("{}", style(links.len()).green());
 
 }

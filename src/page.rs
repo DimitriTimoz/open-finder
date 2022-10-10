@@ -1,6 +1,6 @@
 use petgraph::prelude::UnGraphMap;
 use progress_bar::*;
-use std::{collections::HashMap, fmt::Debug, time::Duration, thread};
+use std::{collections::HashMap, fmt::{Debug, format}, time::Duration, thread, fs::File, io::{Read, Write}};
 
 use crate::{
     content::{Content, ContentType},
@@ -65,6 +65,7 @@ impl Page {
     }
 }
 
+#[derive(Default)]
 pub struct PagesGraph {
     graph: UnGraphMap<[u8; 32], ()>,
     pages: HashMap<Url, Option<Page>>,
@@ -73,11 +74,7 @@ pub struct PagesGraph {
 
 impl PagesGraph {
     pub fn new() -> Self {
-        PagesGraph {
-            graph: UnGraphMap::new(),
-            pages: HashMap::new(),
-            urls: HashMap::new(),
-        }
+        PagesGraph::default()
     }
 
     /// Add a not fetched url
@@ -202,6 +199,55 @@ impl PagesGraph {
     /// Get all links in the graph
     pub fn get_links(&self) -> Vec<Url> {
         self.urls.values().cloned().collect()
+    }
+
+    /// Save the graph to a file
+    pub fn save_graph(&self) {
+        let mut nodes_json: Vec<String> = Vec::new();
+        let mut edges_json: Vec<String> = Vec::new();
+        let mut nodes: HashMap<[u8; 32], u32> = HashMap::new();
+        for (i, node) in self.graph.nodes().enumerate() {
+            if let Some(url) = self.urls.get(&node) { 
+                let url = url.to_string().trim_start_matches("https://").trim_start_matches("http://").replace('\\', "/").replace("\"", "\\\"");
+                let url = if url.len() > 25 {
+                    format!("{}..", &url[..25])
+                } else {
+                    url
+                };
+                let node_json = format!(r#"
+                    {{
+                        "id": "{i}",
+                        "label": "{url}"
+
+                    }},
+                "#); 
+                nodes_json.push(node_json);
+                nodes.insert(node, i as u32);
+            }
+        }
+
+        for (from, to, _) in self.graph.all_edges() {
+            let from = nodes.get(&from).unwrap();
+            let to = nodes.get(&to).unwrap();
+            let edge_json = format!(r#"
+                {{
+                    "source": "{from}",
+                    "target": "{to}"
+                }},
+            "#);
+            edges_json.push(edge_json);
+        }
+
+        // Copy template
+        let json = format!(r#"{{
+            "nodes": [{}],
+            "edges":[{}]
+        }}"#, nodes_json.join(","), edges_json.join(","));
+
+
+        // Write to file
+        let mut file = File::create("graph.json").unwrap();
+        file.write_all(json.as_bytes()).unwrap();
     }
 }
 
