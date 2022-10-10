@@ -1,6 +1,7 @@
-use std::{fmt::Debug, collections::HashMap};
-use petgraph::Graph;
+use std::{fmt::Debug, collections::{HashMap, BTreeMap}, cell::RefCell, rc::Rc, hash::{Hash, Hasher}};
+use petgraph::{ data::Build, prelude::{GraphMap, UnGraphMap}, Undirected, EdgeType, Graph, visit::{IntoNodeIdentifiers, IntoNodeReferences}};
 use progress_bar::*;
+use sha2::{Sha256, Digest};
 
 use crate::{
     content::{Content, ContentType},
@@ -69,22 +70,36 @@ impl Page {
 }
 
 struct PagesGraph {
-    graph: Graph<Url, i32>,
+    graph: UnGraphMap<[u8; 32], ()>,
     pages: HashMap<Url, Page>,
+    urls: HashMap<[u8; 32], Url>,
 }
 
 impl PagesGraph {
     pub fn new() -> Self {
         PagesGraph {
-            graph: Graph::new(),
+            graph: UnGraphMap::new(),
             pages: HashMap::new(),
+            urls: HashMap::new(),
         }
     }
 
     pub fn add_url(&mut self, from: Url, to: Url) {
-        let from_node = self.graph.add_node(from);
-        let to_node = self.graph.add_node(to);
-        self.graph.add_edge(from_node, to_node, 1);
+        // Hash from
+        let from_hash = from.hash_sha256();
+        if !self.graph.contains_node(from_hash) {
+            self.graph.add_node(from_hash);
+        } 
+        self.urls.insert(from_hash, from);
+                
+        // Hash to
+        let to_hash = to.hash_sha256();
+        if !self.graph.contains_node(to_hash) {
+            self.graph.add_node(to_hash);
+        }
+        self.urls.insert(to_hash, to);
+        
+        self.graph.add_edge(from_hash, to_hash, ());
     }
 
     pub fn add_page(&mut self, page: Page) {
@@ -92,8 +107,10 @@ impl PagesGraph {
     }
 
     pub fn remove_node(&mut self, url: Url) {
-        let node = self.graph.node_indices().find(|n| self.graph[*n] == url).unwrap();
-        self.graph.remove_node(node);
+        let hash = url.hash_sha256();
+        self.graph.remove_node(hash);
+        self.pages.remove(&url);
+        self.urls.remove(&hash);
     }
    
 }
@@ -113,7 +130,17 @@ mod tests {
     async fn test_graph() {
         let mut graph = PagesGraph::new();
         graph.add_url(Url::parse(&"https://insagenda.fr").unwrap(), Url::parse(&"https://insagenda.fr/agenda").unwrap());
-        graph.add_url(Url::parse(&"https://insagenda.fr/agenda").unwrap(), Url::parse(&"https://insagenda.fr/").unwrap());
-        println!("{:?}", graph.graph);
+        graph.add_url(Url::parse(&"https://insagenda.fr/agenda").unwrap(), Url::parse(&"https://insagenda.fr").unwrap());
+
+        assert!(graph.graph.node_count() == 2);
+        
+        graph.remove_node(Url::parse(&"https://insagenda.fr").unwrap());
+
+        assert!(graph.graph.node_count() == 1);
+
+        graph.add_url(Url::parse(&"https://insagenda.fr").unwrap(), Url::parse(&"https://insagenda.fr/agenda").unwrap());
+        graph.add_url(Url::parse(&"https://insagenda.fr/agenda").unwrap(), Url::parse(&"https://insagenda.fr/login").unwrap());
+        graph.add_url(Url::parse(&"https://insagenda.fr/login").unwrap(), Url::parse(&"https://insagenda.fr/register").unwrap());
+        graph.add_url(Url::parse(&"https://insagenda.fr/register").unwrap(), Url::parse(&"https://insagenda.fr/login").unwrap());
     }
 }

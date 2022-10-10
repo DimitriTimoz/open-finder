@@ -1,9 +1,11 @@
+use sha2::{Sha256, Digest};
+
 use crate::link::errors::UrlError;
 use core::fmt::Debug;
 use std::{collections::HashMap, hash::Hasher, hash::Hash, fmt::Display};
 
 
-#[derive(Clone)]
+#[derive(Clone, PartialOrd, Ord)]
 pub struct Url {
     url: String,
     host: String,
@@ -12,6 +14,16 @@ pub struct Url {
 impl Hash for Url {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.url.hash(state);
+    }
+}
+
+impl Url {
+    pub fn hash_sha256(&self) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(self.url.clone());
+        let mut hash: [u8; 32] = Default::default();
+        hash.copy_from_slice(hasher.finalize().as_slice());
+        hash
     }
 }
 
@@ -42,6 +54,7 @@ impl Url {
         use UrlError::*;
 
         let url = v.to_string();
+        let url = url.trim_end_matches('/');
         let mut url_split = url.split("://");
         match url_split.next() {
             Some(v) => {
@@ -137,6 +150,8 @@ mod tests {
         assert!(Url::parse(&"http://www.rust-lang.org/").is_ok());
 
         assert!(Url::parse(&"://www.rust-lang.org/").is_err());
+
+        assert_eq!(Url::parse(&"https://www.google.com").unwrap(), Url::parse(&"https://www.google.com/").unwrap());
     }
 
     #[test]
