@@ -1,13 +1,27 @@
 use crate::link::errors::UrlError;
 use core::fmt::Debug;
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hasher, hash::Hash, fmt::Display};
 
 
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Clone)]
 pub struct Url {
     url: String,
     host: String,
 }
+
+impl Hash for Url {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.url.hash(state);
+    }
+}
+
+impl PartialEq for Url {
+    fn eq(&self, other: &Self) -> bool {
+        self.url == other.url
+    }
+}
+
+impl Eq for Url {}
 
 pub trait HackTraitVecUrlString {
     fn to_string(&self) -> String;
@@ -16,8 +30,8 @@ pub trait HackTraitVecUrlString {
 impl HackTraitVecUrlString for HashMap<Url, ()> {
     fn to_string(&self) -> String {
         let mut string = String::new();
-        for (url, _) in self {
-            string.push_str(&format!(" - {} \n", &url.to_string()));
+        for url in self.keys() {
+            string.push_str(&format!(" {};", &url.to_string()));
         }
         string
     }
@@ -53,9 +67,9 @@ impl Url {
     }
 }
 
-impl ToString for Url {
-    fn to_string(&self) -> String {
-        self.url.to_string()
+impl Display for Url {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.url)
     }
 }
 

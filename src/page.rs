@@ -1,4 +1,5 @@
 use std::{fmt::Debug, collections::HashMap};
+use petgraph::Graph;
 use progress_bar::*;
 
 use crate::{
@@ -8,7 +9,6 @@ use crate::{
 use errors::PageError::*;
 
 use self::errors::PageError;
-
 
 pub struct Page {
     url: Url,
@@ -68,11 +68,52 @@ impl Page {
     }
 }
 
+struct PagesGraph {
+    graph: Graph<Url, i32>,
+    pages: HashMap<Url, Page>,
+}
+
+impl PagesGraph {
+    pub fn new() -> Self {
+        PagesGraph {
+            graph: Graph::new(),
+            pages: HashMap::new(),
+        }
+    }
+
+    pub fn add_url(&mut self, from: Url, to: Url) {
+        let from_node = self.graph.add_node(from);
+        let to_node = self.graph.add_node(to);
+        self.graph.add_edge(from_node, to_node, 1);
+    }
+
+    pub fn add_page(&mut self, page: Page) {
+        self.pages.insert(page.url.clone(), page);
+    }
+
+    pub fn remove_node(&mut self, url: Url) {
+        let node = self.graph.node_indices().find(|n| self.graph[*n] == url).unwrap();
+        self.graph.remove_node(node);
+    }
+   
+}
+
 mod errors {
     use super::*;
 
     #[derive(Debug)]
     pub enum PageError {
         ReqwestError(reqwest::Error),
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn test_graph() {
+        let mut graph = PagesGraph::new();
+        graph.add_url(Url::parse(&"https://insagenda.fr").unwrap(), Url::parse(&"https://insagenda.fr/agenda").unwrap());
+        graph.add_url(Url::parse(&"https://insagenda.fr/agenda").unwrap(), Url::parse(&"https://insagenda.fr/").unwrap());
+        println!("{:?}", graph.graph);
     }
 }
