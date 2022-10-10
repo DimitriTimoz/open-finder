@@ -209,11 +209,6 @@ impl PagesGraph {
         for (i, node) in self.graph.nodes().enumerate() {
             if let Some(url) = self.urls.get(&node) { 
                 let url = url.to_string().trim_start_matches("https://").trim_start_matches("http://").replace('\\', "/").replace("\"", "\\\"");
-                let url = if url.len() > 25 {
-                    format!("{}..", &url[..25])
-                } else {
-                    url
-                };
                 let node_json = format!(r#"
                     {{
                         "id": "{i}",
