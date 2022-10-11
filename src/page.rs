@@ -67,9 +67,9 @@ impl Page {
 
 #[derive(Default)]
 pub struct PagesGraph {
-    graph: UnGraphMap<[u8; 32], ()>,
+    graph: UnGraphMap<[u8; 20], ()>,
     pages: HashMap<Url, Option<Page>>,
-    urls: HashMap<[u8; 32], Url>, // key: hash of url, value: url
+    urls: HashMap<[u8; 20], Url>, // key: hash of url, value: url
 }
 
 impl PagesGraph {
@@ -80,7 +80,7 @@ impl PagesGraph {
     /// Add a not fetched url
     pub fn add_url(&mut self, from: Url, to: Url) {
         // Hash from
-        let from_hash = from.hash_sha256();
+        let from_hash = from.hash_sha128();
         if !self.graph.contains_node(from_hash) {
             self.graph.add_node(from_hash);
         }
@@ -90,7 +90,7 @@ impl PagesGraph {
         self.pages.entry(from).or_insert(None);
 
         // Hash to
-        let to_hash = to.hash_sha256();
+        let to_hash = to.hash_sha128();
         if !self.graph.contains_node(to_hash) {
             self.graph.add_node(to_hash);
         }
@@ -124,7 +124,7 @@ impl PagesGraph {
 
     /// Remove an url from the graph
     pub fn remove_node(&mut self, url: Url) {
-        let hash = url.hash_sha256();
+        let hash = url.hash_sha128();
         self.graph.remove_node(hash);
         self.pages.remove(&url);
         self.urls.remove(&hash);
@@ -140,9 +140,9 @@ impl PagesGraph {
     fn get_closest_url_to_fetch_recursion(
         &self,
         start: Url,
-        visited: &mut HashMap<[u8; 32], ()>,
+        visited: &mut HashMap<[u8; 20], ()>,
     ) -> Vec<Url> {
-        let start = start.hash_sha256();
+        let start = start.hash_sha128();
         let neighbors = self.graph.neighbors(start);
         let mut to_fetch = Vec::new();
         visited.insert(start, ());
@@ -214,7 +214,7 @@ impl PagesGraph {
     pub fn save_graph(&self) {
         let mut nodes_json: Vec<String> = Vec::new();
         let mut edges_json: Vec<String> = Vec::new();
-        let mut nodes: HashMap<[u8; 32], u32> = HashMap::new();
+        let mut nodes: HashMap<[u8; 20], u32> = HashMap::new();
         for (i, node) in self.graph.nodes().enumerate() {
             if let Some(url) = self.urls.get(&node) { 
                 let url = url.to_string().trim_start_matches("https://").trim_start_matches("http://").replace('\\', "/").replace("\"", "\\\"");

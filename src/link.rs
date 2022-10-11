@@ -1,4 +1,4 @@
-use sha2::{Digest, Sha256};
+use sha1::{Sha1, Digest};
 
 use crate::{link::errors::UrlError, prtocols::UriScheme};
 use core::fmt::Debug;
@@ -14,10 +14,10 @@ impl Hash for Url {
 }
 
 impl Url {
-    pub fn hash_sha256(&self) -> [u8; 32] {
-        let mut hasher = Sha256::new();
+    pub fn hash_sha128(&self) -> [u8; 20] {
+        let mut hasher = Sha1::new();
         hasher.update(self.url.clone());
-        let mut hash: [u8; 32] = Default::default();
+        let mut hash: [u8; 20] = Default::default();
         hash.copy_from_slice(hasher.finalize().as_slice());
         hash
     }
