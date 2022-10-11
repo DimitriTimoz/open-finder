@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha256};
 
-use crate::link::errors::UrlError;
+use crate::{link::errors::UrlError, prtocols::UriScheme};
 use core::fmt::Debug;
 use std::{collections::HashMap, fmt::Display, hash::Hash, hash::Hasher};
 
@@ -71,8 +71,8 @@ impl Url {
     }
     /// Get the protocol of the url before the `://`
     #[inline]
-    pub fn get_protocol(&self) -> &str {
-        self.url.split("://").next().unwrap()
+    pub fn get_uri_scheme(&self) -> UriScheme {
+        UriScheme::from(self.url.split("://").next().unwrap().to_string())
     }
     /// Get the host of the url
     #[inline]
@@ -144,7 +144,6 @@ mod tests {
 
         let url = Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
         assert_eq!(url.get_host(), "www.youtube.com");
-        assert_eq!(url.get_protocol(), "https");
 
         assert!(Url::parse(&"www.google.com").is_err());
         assert!(Url::parse(&"http:/www.google.com").is_err());
@@ -165,6 +164,14 @@ mod tests {
                 .to_string(),
             Url::parse(&"https://sentry.io").unwrap().to_string()
         );
+    }
+
+    #[test]
+    fn test_get_uri_scheme() {
+        assert_eq!(Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap().get_uri_scheme(), UriScheme::Https); 
+        assert_eq!(Url::parse(&"ftp://example.com").unwrap().get_uri_scheme(), UriScheme::Ftp); 
+        assert_eq!(Url::parse(&"Sftp://example.com").unwrap().get_uri_scheme(), UriScheme::Sftp); 
+
     }
 
     #[test]

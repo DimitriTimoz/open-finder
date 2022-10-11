@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-
+#[derive(Debug, PartialEq, Eq)]
 pub enum UriScheme {
     Http,
     Https,
@@ -17,7 +17,7 @@ pub enum UriScheme {
 
 impl From<String> for UriScheme {
     fn from(scheme: String) -> Self {
-        match scheme.as_str() {
+        match scheme.to_lowercase().as_str() {
             "http" => UriScheme::Http,
             "https" => UriScheme::Https,
             "ftp" => UriScheme::Ftp,
