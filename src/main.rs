@@ -1,10 +1,10 @@
 pub mod content;
 pub mod link;
 pub mod page;
-
+pub mod prtocols;
 use console::{style, Term};
 
-use crate::{page::{PagesGraph}};
+use crate::page::PagesGraph;
 
 const NAME_ASCII_ART: &str = r#"
 ___  ____  _____ _   _          _____ ___ _   _ ____  _____ ____  
@@ -43,7 +43,6 @@ async fn main() {
     for link in &links {
         println!("- {}", link);
     }
-    graph.save_graph();
     println!("{}", style(links.len()).green());
 
 }

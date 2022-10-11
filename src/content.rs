@@ -20,6 +20,7 @@ impl Content {
         match self.kind {
             ContentType::Html => get_links(&self.bytes),
             ContentType::Pdf => todo!("get links from pdf"),
+            _ => HashMap::new(),
         }
     }
 }
