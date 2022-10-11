@@ -5,10 +5,7 @@ use core::fmt::Debug;
 use std::{collections::HashMap, fmt::Display, hash::Hash, hash::Hasher};
 
 #[derive(Clone, PartialOrd, Ord)]
-pub struct Url {
-    url: String,
-    host: String,
-}
+pub struct Url {url: String}
 
 impl Hash for Url {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -53,8 +50,12 @@ impl Url {
         use UrlError::*;
 
         let url = v.to_string();
+        if !url.contains("://") {
+            return Err(NoProtocol);
+        }
         let url = html_escape::decode_html_entities(&url).to_string();
-        let url = url.trim_end_matches('/');
+        // TODO: clear trim_end_matches
+        let url = url.trim_end_matches('/').trim_end_matches('\\').trim_end_matches('"').trim_matches('}');
         let mut url_split = url.split("://");
         match url_split.next() {
             Some(v) => {
@@ -64,19 +65,19 @@ impl Url {
             }
             None => return Err(NotValidUrl),
         };
-
-        let host = match url_split.next() {
-            Some(host) => host.split('/').next().unwrap().to_string(),
-            None => return Err(NotValidUrl),
-        };
         Ok(Url {
             url: url.to_string(),
-            host,
         })
     }
     /// Get the protocol of the url before the `://`
-    fn get_protocol(&self) -> &str {
+    #[inline]
+    pub fn get_protocol(&self) -> &str {
         self.url.split("://").next().unwrap()
+    }
+    /// Get the host of the url
+    #[inline]
+    pub fn get_host(&self) -> &str {
+        self.url.split("://").nth(1).unwrap().split('/').next().unwrap()
     }
 }
 
@@ -115,14 +116,12 @@ pub fn get_links(content: &str) -> HashMap<Url, ()> {
                 break;
             }
         }
-        for j in i..end {
+        for (j, c) in content_p.iter().enumerate().take(end).skip(i) {
             let escape = b"\n ,\"'()<>\r";
-            if escape.contains(&content_p[j]) {
-                end = j;
+            end = j;
+            if escape.contains(c) || c == &b'"' {
                 break;
-            } else {
-                end = j;
-            }
+            } 
         }
         if let Ok(link) =  Url::parse(&content[start..end].to_string()) {
             links.insert(link, ());
@@ -141,10 +140,10 @@ mod tests {
         let url = Url::parse(&"https://www.google.com").unwrap();
 
         assert_eq!(url.url, "https://www.google.com");
-        assert_eq!(url.host, "www.google.com");
+        assert_eq!(url.get_host(), "www.google.com");
 
         let url = Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
-        assert_eq!(url.host, "www.youtube.com");
+        assert_eq!(url.get_host(), "www.youtube.com");
         assert_eq!(url.get_protocol(), "https");
 
         assert!(Url::parse(&"www.google.com").is_err());
@@ -156,6 +155,15 @@ mod tests {
         assert_eq!(
             Url::parse(&"https://www.google.com").unwrap(),
             Url::parse(&"https://www.google.com/").unwrap()
+        );
+
+        assert_eq!(
+            get_links("https://sentry.io/}")
+                .keys()
+                .next()
+                .unwrap()
+                .to_string(),
+            Url::parse(&"https://sentry.io").unwrap().to_string()
         );
     }
 
