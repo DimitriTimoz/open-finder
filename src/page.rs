@@ -1,14 +1,12 @@
 use petgraph::prelude::UnGraphMap;
 use progress_bar::*;
-use std::{collections::HashMap, fmt::{Debug}, time::Duration, thread, fs::File, io::{Write}};
+use std::{collections::HashMap, fmt::Debug, fs::File, io::Write, thread, time::Duration};
 
 use crate::{
     content::{Content, ContentType},
     link::{HackTraitVecUrlString, Url},
 };
-use errors::PageError::*;
-
-use self::errors::PageError;
+use errors::PageError::{self, *};
 
 pub struct Page {
     url: Url,
@@ -32,17 +30,16 @@ impl Debug for Page {
 impl Page {
     pub async fn new(url: Url) -> Result<Self, PageError> {
         let mut page = Page {
-            url,
+            url: url.clone(),
             referers: HashMap::new(),
             links: HashMap::new(),
-            content: Content::new(String::new(), ContentType::Html),
+            content: Content::new(String::new(), url.get_file_name()),
         };
         page.fetch().await?;
         Ok(page)
     }
 
     async fn fetch(&mut self) -> Result<(), PageError> {
-
         let client = reqwest::ClientBuilder::new()
             .gzip(true)
             .build()
@@ -56,9 +53,9 @@ impl Page {
 
         // get links from the page
         let bytes = res.text().await.map_err(ReqwestError)?;
-        self.content = Content::new(bytes, ContentType::Html); 
+        self.content = Content::new(bytes,  self.url.get_file_name());
         self.links = self.content.get_links();
-        self.content = Content::new(String::new(), ContentType::Html); // TODO: save the content
+        self.content = Content::new(String::new(), self.url.get_file_name()); // TODO: save the content
         self.links.remove(&self.url);
 
         Ok(())
@@ -110,7 +107,6 @@ impl PagesGraph {
             let url = link.clone();
 
             self.add_url(from_url.clone(), url);
-
         }
         self.pages.insert(from_url, Some(page));
     }
@@ -180,7 +176,12 @@ impl PagesGraph {
 
         for i in 0..max_distance {
             let to_fetch = self.get_closest_url_to_fetch(start.clone());
-            print_progress_bar_info(&format!("{} - New links", i+1), &format!("{}", to_fetch.len()), Color::Cyan, Style::Bold);
+            print_progress_bar_info(
+                &format!("{} - New links", i + 1),
+                &format!("{}", to_fetch.len()),
+                Color::Cyan,
+                Style::Bold,
+            );
 
             for url in to_fetch {
                 if i != max_distance - 1 {
@@ -198,7 +199,6 @@ impl PagesGraph {
                 thread::sleep(Duration::from_millis(100));
             }
             self.save_graph();
-            
         }
         set_progress_bar_action("Fetched", Color::Green, Style::Bold);
         finalize_progress_bar();
@@ -216,15 +216,22 @@ impl PagesGraph {
         let mut edges_json: Vec<String> = Vec::new();
         let mut nodes: HashMap<[u8; 20], u32> = HashMap::new();
         for (i, node) in self.graph.nodes().enumerate() {
-            if let Some(url) = self.urls.get(&node) { 
-                let url = url.to_string().trim_start_matches("https://").trim_start_matches("http://").replace('\\', "/").replace("\"", "\\\"");
-                let node_json = format!(r#"
+            if let Some(url) = self.urls.get(&node) {
+                let url = url
+                    .to_string()
+                    .trim_start_matches("https://")
+                    .trim_start_matches("http://")
+                    .replace('\\', "/")
+                    .replace("\"", "\\\"");
+                let node_json = format!(
+                    r#"
                     {{
                         "id": "{i}",
                         "label": "{url}"
 
                     }}
-                "#); 
+                "#
+                );
                 nodes_json.push(node_json);
                 nodes.insert(node, i as u32);
             }
@@ -233,21 +240,26 @@ impl PagesGraph {
         for (from, to, _) in self.graph.all_edges() {
             let from = nodes.get(&from).unwrap();
             let to = nodes.get(&to).unwrap();
-            let edge_json = format!(r#"
+            let edge_json = format!(
+                r#"
                 {{
                     "source": "{from}",
                     "target": "{to}"
                 }}
-            "#);
+            "#
+            );
             edges_json.push(edge_json);
         }
 
         // Copy template
-        let json = format!(r#"{{
+        let json = format!(
+            r#"{{
             "nodes": [{}],
             "edges":[{}]
-        }}"#, nodes_json.join(","), edges_json.join(","));
-
+        }}"#,
+            nodes_json.join(","),
+            edges_json.join(",")
+        );
 
         // Write to file
         let mut file = File::create("graph.json").unwrap();

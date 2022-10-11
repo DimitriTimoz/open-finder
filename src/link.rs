@@ -1,11 +1,13 @@
-use sha1::{Sha1, Digest};
+use sha1::{Digest, Sha1};
 
 use crate::{link::errors::UrlError, prtocols::UriScheme};
 use core::fmt::Debug;
 use std::{collections::HashMap, fmt::Display, hash::Hash, hash::Hasher};
 
 #[derive(Clone, PartialOrd, Ord)]
-pub struct Url {url: String}
+pub struct Url {
+    url: String,
+}
 
 impl Hash for Url {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -55,7 +57,11 @@ impl Url {
         }
         let url = html_escape::decode_html_entities(&url).to_string();
         // TODO: clear trim_end_matches
-        let url = url.trim_end_matches('/').trim_end_matches('\\').trim_end_matches('"').trim_matches('}');
+        let url = url
+            .trim_end_matches('/')
+            .trim_end_matches('\\')
+            .trim_end_matches('"')
+            .trim_matches('}');
         let mut url_split = url.split("://");
         match url_split.next() {
             Some(v) => {
@@ -77,7 +83,22 @@ impl Url {
     /// Get the host of the url
     #[inline]
     pub fn get_host(&self) -> &str {
-        self.url.split("://").nth(1).unwrap().split('/').next().unwrap()
+        self.url
+            .split("://")
+            .nth(1)
+            .unwrap()
+            .split('/')
+            .next()
+            .unwrap()
+    }
+
+    /// Get the file name 
+    #[inline]
+    pub fn get_file_name(&self) -> String {
+    self.url
+            .split('/')
+            .last()
+            .unwrap().to_string()
     }
 }
 
@@ -121,9 +142,9 @@ pub fn get_links(content: &str) -> HashMap<Url, ()> {
             end = j;
             if escape.contains(c) || c == &b'"' {
                 break;
-            } 
+            }
         }
-        if let Ok(link) =  Url::parse(&content[start..end].to_string()) {
+        if let Ok(link) = Url::parse(&content[start..end].to_string()) {
             links.insert(link, ());
         }
         links.extend(get_links(&content[end..]));
@@ -168,10 +189,20 @@ mod tests {
 
     #[test]
     fn test_get_uri_scheme() {
-        assert_eq!(Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap().get_uri_scheme(), UriScheme::Https); 
-        assert_eq!(Url::parse(&"ftp://example.com").unwrap().get_uri_scheme(), UriScheme::Ftp); 
-        assert_eq!(Url::parse(&"Sftp://example.com").unwrap().get_uri_scheme(), UriScheme::Sftp); 
-
+        assert_eq!(
+            Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+                .unwrap()
+                .get_uri_scheme(),
+            UriScheme::Https
+        );
+        assert_eq!(
+            Url::parse(&"ftp://example.com").unwrap().get_uri_scheme(),
+            UriScheme::Ftp
+        );
+        assert_eq!(
+            Url::parse(&"Sftp://example.com").unwrap().get_uri_scheme(),
+            UriScheme::Sftp
+        );
     }
 
     #[test]

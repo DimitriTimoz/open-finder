@@ -44,5 +44,4 @@ async fn main() {
         println!("- {}", link);
     }
     println!("{}", style(links.len()).green());
-
 }

@@ -14,7 +14,6 @@ pub enum UriScheme {
     Unknown(String),
 }
 
-
 impl From<String> for UriScheme {
     fn from(scheme: String) -> Self {
         match scheme.to_lowercase().as_str() {
