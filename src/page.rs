@@ -1,6 +1,6 @@
 use petgraph::prelude::UnGraphMap;
 use progress_bar::*;
-use std::{collections::HashMap, fmt::{Debug, format}, time::Duration, thread, fs::File, io::{Read, Write}};
+use std::{collections::HashMap, fmt::{Debug}, time::Duration, thread, fs::File, io::{Write}};
 
 use crate::{
     content::{Content, ContentType},
@@ -178,17 +178,26 @@ impl PagesGraph {
 
         self.add_page(page);
 
-        for _ in 0..max_distance {
+        for i in 0..max_distance {
             let to_fetch = self.get_closest_url_to_fetch(start.clone());
-            for url in to_fetch {
-                set_progress_bar_max(self.get_links_count().try_into().unwrap());
+            print_progress_bar_info(&format!("{} - New links", i+1), &format!("{}", to_fetch.len()), Color::Cyan, Style::Bold);
 
-                let page = Page::new(url.clone()).await?;
+            for url in to_fetch {
+                if i != max_distance - 1 {
+                    set_progress_bar_max(self.get_links_count().try_into().unwrap());
+                }
+
+                let page = Page::new(url.clone()).await;
+                if page.is_err() {
+                    continue;
+                }
+                let page = page.unwrap();
                 self.add_page_with_referer(page, url.clone());
                 print_progress_bar_info("Fetched", &url.to_string(), Color::Blue, Style::Bold);
                 inc_progress_bar();
                 thread::sleep(Duration::from_millis(100));
             }
+            self.save_graph();
             
         }
         set_progress_bar_action("Fetched", Color::Green, Style::Bold);
@@ -214,7 +223,7 @@ impl PagesGraph {
                         "id": "{i}",
                         "label": "{url}"
 
-                    }},
+                    }}
                 "#); 
                 nodes_json.push(node_json);
                 nodes.insert(node, i as u32);
@@ -228,7 +237,7 @@ impl PagesGraph {
                 {{
                     "source": "{from}",
                     "target": "{to}"
-                }},
+                }}
             "#);
             edges_json.push(edge_json);
         }
