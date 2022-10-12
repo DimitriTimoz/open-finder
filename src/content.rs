@@ -51,9 +51,8 @@ impl Content {
     
     pub fn get_links(&self) -> HashMap<Url, ()> {
         match self.kind {
-            ContentType::Html => get_links(&self.bytes),
-            ContentType::Pdf => todo!("get links from pdf"),
-            _ => HashMap::new(),
+            ContentType::Pdf => HashMap::new(),
+            _ => get_links(&self.bytes),
         }
     }
 }

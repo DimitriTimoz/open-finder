@@ -3,7 +3,7 @@ use progress_bar::*;
 use std::{collections::HashMap, fmt::Debug, fs::File, io::Write, thread, time::Duration};
 
 use crate::{
-    content::{Content, ContentType},
+    content::Content,
     link::{HackTraitVecUrlString, Url},
 };
 use errors::PageError::{self, *};
@@ -171,7 +171,7 @@ impl PagesGraph {
         let page = Page::new(start.clone()).await?;
         init_progress_bar(1);
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
-
+        let mut count = 0;
         self.add_page(page);
 
         for i in 0..max_distance {
@@ -187,6 +187,11 @@ impl PagesGraph {
                 if i != max_distance - 1 {
                     set_progress_bar_max(self.get_links_count().try_into().unwrap());
                 }
+                if count % 200 == 0 {
+                    self.save_graph();
+                }
+                count += 1;
+
 
                 let page = Page::new(url.clone()).await;
                 if page.is_err() {
@@ -212,8 +217,9 @@ impl PagesGraph {
 
     /// Save the graph to a file
     pub fn save_graph(&self) {
-        let mut nodes_json: Vec<String> = Vec::new();
-        let mut edges_json: Vec<String> = Vec::new();
+        let mut nodes_csv: Vec<String> = vec![String::from("id;label")];
+        let mut edges_csv: Vec<String> = vec![String::from("Source;Target")];
+
         let mut nodes: HashMap<[u8; 20], u32> = HashMap::new();
         for (i, node) in self.graph.nodes().enumerate() {
             if let Some(url) = self.urls.get(&node) {
@@ -222,17 +228,9 @@ impl PagesGraph {
                     .trim_start_matches("https://")
                     .trim_start_matches("http://")
                     .replace('\\', "/")
-                    .replace("\"", "\\\"");
-                let node_json = format!(
-                    r#"
-                    {{
-                        "id": "{i}",
-                        "label": "{url}"
-
-                    }}
-                "#
-                );
-                nodes_json.push(node_json);
+                    .replace('\"', "\\\"")
+                    .replace(';', "%3B");
+                nodes_csv.push(format!("{};{}", i, url));
                 nodes.insert(node, i as u32);
             }
         }
@@ -240,30 +238,21 @@ impl PagesGraph {
         for (from, to, _) in self.graph.all_edges() {
             let from = nodes.get(&from).unwrap();
             let to = nodes.get(&to).unwrap();
-            let edge_json = format!(
-                r#"
-                {{
-                    "source": "{from}",
-                    "target": "{to}"
-                }}
-            "#
-            );
-            edges_json.push(edge_json);
+            edges_csv.push(format!("{};{}", from, to));
         }
 
         // Copy template
-        let json = format!(
-            r#"{{
-            "nodes": [{}],
-            "edges":[{}]
-        }}"#,
-            nodes_json.join(","),
-            edges_json.join(",")
-        );
+        let nodes_csv = nodes_csv.join("\n");
+        let edges_csv = edges_csv.join("\n");
+    
 
         // Write to file
-        let mut file = File::create("graph.json").unwrap();
-        file.write_all(json.as_bytes()).unwrap();
+        let mut file = File::create("nodes.csv").unwrap();
+        file.write_all(nodes_csv.as_bytes()).unwrap();
+
+        let mut file = File::create("edges.csv").unwrap();
+        file.write_all(edges_csv.as_bytes()).unwrap();
+
     }
 }
 

@@ -144,9 +144,12 @@ pub fn get_links(content: &str) -> HashMap<Url, ()> {
                 break;
             }
         }
-        if let Ok(link) = Url::parse(&content[start..end].to_string()) {
-            links.insert(link, ());
+        if let Some(url) = content.get(start..end) {
+            if let Ok(link) = Url::parse(&url) {
+                links.insert(link, ());
+            }
         }
+        
         links.extend(get_links(&content[end..]));
     }
     links
