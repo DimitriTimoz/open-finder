@@ -233,5 +233,13 @@ mod tests {
         assert!(links.contains_key(&Url::parse(&"https://www.google.com").unwrap()));
         assert!(links.contains_key(&Url::parse(&"http://www.youtube.com").unwrap()));
         assert!(links.contains_key(&Url::parse(&"ftp://www.rust-lang.org").unwrap()));
+
+        // Multiple links with special characters
+        let content = r#""https://www.google.com", "https://www.youtube.com", "ftp://www.rust-lang.org""#;
+        let links = get_links(content);
+        assert_eq!(links.len(), 3);
+        assert!(links.contains_key(&Url::parse(&"https://www.google.com").unwrap()));
+        assert!(links.contains_key(&Url::parse(&"https://www.youtube.com").unwrap()));
+        assert!(links.contains_key(&Url::parse(&"ftp://www.rust-lang.org").unwrap()));
     }
 }

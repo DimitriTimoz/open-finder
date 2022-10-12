@@ -50,7 +50,7 @@ impl Page {
             .send()
             .await
             .map_err(ReqwestError)?;
-
+        
         // get links from the page
         let bytes = res.text().await.map_err(ReqwestError)?;
         self.content = Content::new(bytes,  self.url.get_file_name());
