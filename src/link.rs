@@ -149,8 +149,7 @@ pub fn get_links(content: &str) -> HashMap<Url, ()> {
                 links.insert(link, ());
             }
         }
-        
-        links.extend(get_links(&content[end..]));
+        if let Some(v) = content.get(end..) { links.extend(get_links(v)); }
     }
     links
 }
