@@ -1,6 +1,6 @@
 use petgraph::prelude::UnGraphMap;
 use progress_bar::*;
-use std::{collections::HashMap, fmt::Debug, fs::File, io::Write, thread, time::Duration};
+use std::{collections::{HashSet, HashMap}, fmt::Debug, fs::File, io::Write, thread, time::Duration};
 
 use crate::{
     content::Content,
@@ -10,9 +10,9 @@ use errors::PageError::{self, *};
 
 pub struct Page {
     url: Url,
-    referers: HashMap<Url, ()>,
-    links: HashMap<Url, ()>,
-    content: Content,
+    referers: HashSet<Url>,
+    links: HashSet<Url>,
+    content: Option<Content>,
 }
 
 impl Debug for Page {
@@ -31,9 +31,9 @@ impl Page {
     pub async fn new(url: Url) -> Result<Self, PageError> {
         let mut page = Page {
             url: url.clone(),
-            referers: HashMap::new(),
-            links: HashMap::new(),
-            content: Content::new(String::new(), url.get_file_name()),
+            referers: HashSet::new(),
+            links: HashSet::new(),
+            content: None,
         };
         page.fetch().await?;
         Ok(page)
@@ -53,9 +53,13 @@ impl Page {
         
         // get links from the page
         let bytes = res.text().await.map_err(ReqwestError)?;
-        self.content = Content::new(bytes,  self.url.get_file_name());
-        self.links = self.content.get_links();
-        self.content = Content::new(String::new(), self.url.get_file_name()); // TODO: save the content
+        self.content = Some(Content::new(bytes,  self.url.get_file_name()));
+        self.links = if let Some(content) = &self.content {
+            content.get_links()
+        } else {
+            HashSet::<Url>::new()
+        };
+        self.content = Some(Content::new(String::new(), self.url.get_file_name())); // TODO: save the content
         self.links.remove(&self.url);
 
         Ok(())
@@ -103,7 +107,7 @@ impl PagesGraph {
     /// Add a page to the graph withouth referer
     pub fn add_page(&mut self, page: Page) {
         let from_url = page.url.clone();
-        for link in page.links.keys() {
+        for link in page.links.iter() {
             let url = link.clone();
 
             self.add_url(from_url.clone(), url);

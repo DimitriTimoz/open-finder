@@ -38,7 +38,7 @@ async fn main() {
     let distance = term.read_line().unwrap();
     let distance = distance.parse::<u8>().unwrap();
     let mut graph = PagesGraph::new();
-    graph.fetch_form(url, distance).await;
+    let _ = graph.fetch_form(url, distance).await;
     let links = graph.get_links();
     for link in &links {
         println!("- {}", link);

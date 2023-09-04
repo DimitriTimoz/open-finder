@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use crate::link::{get_links, Url};
 
@@ -49,9 +49,9 @@ impl Content {
         Content { bytes, kind: ContentType::from(name.clone()), name }
     }
     
-    pub fn get_links(&self) -> HashMap<Url, ()> {
+    pub fn get_links(&self) -> HashSet<Url> {
         match self.kind {
-            ContentType::Pdf => HashMap::new(),
+            ContentType::Pdf => HashSet::new(),
             _ => get_links(&self.bytes),
         }
     }
