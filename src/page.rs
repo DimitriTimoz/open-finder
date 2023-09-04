@@ -59,8 +59,62 @@ impl Page {
         } else {
             HashSet::<Url>::new()
         };
-        self.content = Some(Content::new(String::new(), self.url.get_file_name())); // TODO: save the content
         self.links.remove(&self.url);
+
+        Ok(())
+    }
+
+    fn is_cas(&self) -> bool {
+        self.url.is_cas()
+    }
+
+    async fn login_cas(&mut self) -> Result<(), PageError> {
+        // Pull the current page and get the execution
+        self.fetch().await?;
+        
+        let execution = if let Some(content) = &self.content {
+            content
+                .get_bytes()
+                .split("name=\"execution\" value=\"")
+                .nth(1)
+                .unwrap()
+                .split('\"')
+                .next()
+                .unwrap()
+                .to_string()
+        } else {
+            return Err(NotContainsExecution);
+        };
+
+        // Post the login
+        let client = reqwest::ClientBuilder::new()
+            .gzip(true)
+            .build()
+            .map_err(ReqwestError)?;
+
+
+        let res = client
+                        .post(&self.url.to_string())
+                        .form(&[
+                            ("username", "dtimoz"),
+                            ("password", ""),
+                            ("execution", &execution),
+                        ]).send().await.map_err(ReqwestError)?;
+                        
+        // Get the login url
+
+        let url = res.url().to_string();
+        let service = url.split("service=").nth(1).unwrap().to_string();
+        let url = format!("https://cas.insa-rouen.fr/cas/login?service={}", service);
+
+        // Get the page
+        let res = client
+            .get(url + "&ticket=")
+            .send()
+            .await
+            .map_err(ReqwestError)?;
+        
+        
 
         Ok(())
     }
@@ -266,6 +320,7 @@ mod errors {
     #[derive(Debug)]
     pub enum PageError {
         ReqwestError(reqwest::Error),
+        NotContainsExecution,
     }
 }
 #[cfg(test)]
@@ -339,5 +394,14 @@ mod tests {
         let list = graph.get_closest_url_to_fetch(Url::parse(&"https://example.com").unwrap());
 
         assert!(!list.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_login_cas() {
+        let mut page = Page::new(Url::parse(&"https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap()).await.unwrap();
+        if page.is_cas() {
+            page.login_cas().await.unwrap();
+        }
+        
     }
 }

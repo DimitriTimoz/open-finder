@@ -55,4 +55,8 @@ impl Content {
             _ => get_links(&self.bytes),
         }
     }
+
+    pub fn get_bytes(&self) -> &str {
+        &self.bytes
+    }
 }
