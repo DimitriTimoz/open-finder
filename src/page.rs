@@ -98,16 +98,17 @@ impl Page {
         std::io::stdout().flush().unwrap();
         let password = read_password().unwrap();
         let res = client
-                    .post(&self.url.to_string())
-                    .header("X-Content-Type-Options", "nosniff")
-                    .header("X-Frame-Options", "DENY")
-                    .header("X-XSS-Protection", "1; mode=block")
-                    .header("Referer", self.url.to_string().as_str())
-                    .form(&[
-                        ("username", "dtimoz"),
-                        ("password", password.as_str()),
-                        ("execution", &execution),
-                    ]).send().await.map_err(ReqwestError)?;
+                .post(&self.url.to_string())
+                .header("X-Content-Type-Options", "nosniff")
+                .header("X-Frame-Options", "DENY")
+                .header("X-XSS-Protection", "1; mode=block")
+                .header("Referer", self.url.to_string().as_str())
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .form(&[
+                    ("username", "dtimoz"),
+                    ("password", password.as_str()),
+                    ("execution", &execution),
+                ]).send().await.map_err(ReqwestError)?;
                     
         println!("{}", res.text().await.unwrap());
         // Get the login url
