@@ -1,5 +1,7 @@
 use petgraph::prelude::UnGraphMap;
 use progress_bar::*;
+use reqwest::header::{HeaderMap, HeaderName};
+use rpassword::read_password;
 use std::{collections::{HashSet, HashMap}, fmt::Debug, fs::File, io::Write, thread, time::Duration};
 
 use crate::{
@@ -89,23 +91,28 @@ impl Page {
         // Post the login
         let client = reqwest::ClientBuilder::new()
             .gzip(true)
+            .cookie_store(true)
             .build()
             .map_err(ReqwestError)?;
-
-
+        
+        std::io::stdout().flush().unwrap();
+        let password = read_password().unwrap();
         let res = client
-                        .post(&self.url.to_string())
-                        .form(&[
-                            ("username", "dtimoz"),
-                            ("password", ""),
-                            ("execution", &execution),
-                        ]).send().await.map_err(ReqwestError)?;
-                        
+                    .post(&self.url.to_string())
+                    .header("X-Content-Type-Options", "nosniff")
+                    .header("X-Frame-Options", "DENY")
+                    .header("X-XSS-Protection", "1; mode=block")
+                    .header("Referer", self.url.to_string().as_str())
+                    .form(&[
+                        ("username", "dtimoz"),
+                        ("password", password.as_str()),
+                        ("execution", &execution),
+                    ]).send().await.map_err(ReqwestError)?;
+                    
+        println!("{}", res.text().await.unwrap());
         // Get the login url
 
-        let url = res.url().to_string();
-        let service = url.split("service=").nth(1).unwrap().to_string();
-        let url = format!("https://cas.insa-rouen.fr/cas/login?service={}", service);
+        let url = format!("https://cas.insa-rouen.fr/cas/login?service={}", "https://moodle.insa-rouen.fr");
 
         // Get the page
         let res = client

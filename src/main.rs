@@ -2,6 +2,9 @@ pub mod content;
 pub mod link;
 pub mod page;
 pub mod prtocols;
+pub mod manager;
+pub mod prelude;
+
 use console::{style, Term};
 
 use crate::page::PagesGraph;
