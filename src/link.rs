@@ -23,6 +23,16 @@ impl Url {
         hash.copy_from_slice(hasher.finalize().as_slice());
         hash
     }
+
+    pub fn is_media(&self) -> bool {
+        let Some(extension) = self.url.split('.').last() else { return false; };
+
+        matches!(extension.to_lowercase().as_str(), "pdf" | "png" | "jpg" | "jpeg" | "gif" | "svg" | "ico" | "webp" | "bmp" | "tiff" | "tif" | "psd" | "raw" | "css" | "js")
+    }
+
+    pub fn is_insa(&self) -> bool {
+        self.url.contains("insa-rouen.fr")
+    }
 }
 
 impl PartialEq for Url {

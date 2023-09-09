@@ -39,14 +39,15 @@ impl From<String> for ContentType {
         }
     }
 }
+
 pub struct Content {
-    name: String,
     bytes: String,
     kind: ContentType,
 }
+
 impl Content {
     pub fn new(bytes: String, name: String) -> Self {
-        Content { bytes, kind: ContentType::from(name.clone()), name }
+        Content { bytes, kind: ContentType::from(name.clone()) }
     }
     
     pub fn get_links(&self) -> HashSet<Url> {
