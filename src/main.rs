@@ -1,13 +1,13 @@
 pub mod content;
 pub mod link;
-pub mod page;
+pub mod collection;
 pub mod prtocols;
 pub mod manager;
 pub mod prelude;
 
 use console::{style, Term};
 
-use crate::page::UrlCollection;
+use crate::collection::UrlCollection;
 
 const NAME_ASCII_ART: &str = r#"
  ___  ____  _____ _   _          _____ ___ _   _ ____  _____ ____  

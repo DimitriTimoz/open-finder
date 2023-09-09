@@ -164,8 +164,9 @@ pub struct UrlCollection {
     to_fetch: HashSet<Url>,
     fetched: HashSet<Url>,
     client: Rc<Client>,
-    last_fetch: Vec<((Url, u16), Url)>,
+    last_fetch: Vec<(Url, Url)>,
     i: usize,
+    to_save: Vec<(Url, u16)>,
 }
 
 impl Default for UrlCollection {
@@ -176,6 +177,7 @@ impl Default for UrlCollection {
             client: Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap()),
             i: 0,
             last_fetch: Vec::new(),
+            to_save: Vec::new(),
         }
     }
     
@@ -190,15 +192,18 @@ impl UrlCollection {
     pub fn add_url_to_fetch_with_referer(&mut self, from: Url, to: Url, status: u16) {
         if !self.to_fetch.contains(&to.clone()) && !self.fetched.contains(&to.clone()){
             self.to_fetch.insert(to.clone());
+            self.to_save.push((to.clone(), status));
+
         }
 
-        self.last_fetch.push(((from, status), to));
+        self.last_fetch.push((from, to));
     }
 
      /// Add a not fetched url
      pub fn add_url_to_fetch(&mut self, url: Url) {
         if !self.to_fetch.contains(&url) && !self.fetched.contains(&url) {
-            self.to_fetch.insert(url);
+            self.to_fetch.insert(url.clone());
+            self.to_save.push((url, 000));
         }
     }
 
@@ -288,24 +293,21 @@ impl UrlCollection {
         let mut nodes_csv: Vec<String> = vec![];
         let mut edges_csv: Vec<String> = vec![];
         
-        let mut nodes: HashMap<Url, u16> = HashMap::new();
-
-        for ((from, status), to) in self.last_fetch.iter() {
-            if !nodes.contains_key(from) {
-                nodes.insert(from.clone(), *status);
-            }
+        for (from, to) in self.last_fetch.iter() {
             edges_csv.push(format!("{};{}",  from, to));
         }    
 
-        for (url, status) in nodes.iter() {
+        for (url, status) in self.to_save.iter() {
             nodes_csv.push(format!("{};{}", status, url));
         }    
 
         // Append the nodes to the file
         file_nodes.write_all(nodes_csv.join("\n").as_bytes()).unwrap();
+        file_nodes.write_all(b"\n").unwrap();
         
         // Append the edges to the file
         file_edges.write_all(edges_csv.join("\n").as_bytes()).unwrap();
+        file_edges.write_all(b"\n").unwrap();
 
     }
 }
