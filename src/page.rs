@@ -3,6 +3,7 @@ use reqwest::{Client, ClientBuilder};
 use urlencoding;
 use rpassword::read_password;
 use std::{collections::{HashSet, HashMap}, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc};
+use futures;
 
 use crate::{
     content::Content,
@@ -17,6 +18,8 @@ pub struct Page {
     client: Rc<Client>,
     status: u16,
 }
+
+const CONCURRENT_REQUESTS: usize = 20;
 
 impl Debug for Page {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,6 +48,7 @@ impl Page {
     }
 
     async fn fetch(&mut self) -> Result<(), PageError> {
+        
         let res = self.client
                                 .get(&self.url.to_string())
                                 .send()
@@ -75,10 +79,20 @@ impl Page {
     }
 
     async fn login_cas(&mut self) -> Result<(), PageError> {
-        // Pull the current page and get the execution        
-        let execution = if let Some(content) = &self.content {
+        // Pull the current page and get the execution       
+    
+        let res = self.client
+            .get(&self.url.to_string())
+            .send()
+            .await
+            .map_err(ReqwestError)?;
+
+        let execution = if let Ok(content) = res.text().await {
+            if !content.contains("name=\"execution\" value=\"") {
+                return Err(NotContainsExecution);
+            }
+
             content
-                .get_bytes()
                 .split("name=\"execution\" value=\"")
                 .nth(1)
                 .unwrap()
@@ -140,6 +154,10 @@ impl Page {
     pub fn get_status(&self) -> u16 {
         self.status
     }
+
+    pub fn get_url(&self) -> &Url {
+        &self.url
+    }
 }
 
 pub struct UrlCollection {
@@ -188,10 +206,6 @@ impl UrlCollection {
         self.to_fetch.len() + self.fetched.len()
     }
 
-    fn get_url_to_fetch(&self) -> impl Iterator<Item = &Url> {
-        self.to_fetch.iter()
-    }
-
     /// Fetch all pages
     pub async fn fetch_from(&mut self, starts: Vec<Url>) -> Result<(), PageError> {
         init_progress_bar(starts.len());
@@ -201,44 +215,50 @@ impl UrlCollection {
         }
 
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
+        let mut ongoing_requests = vec![];
 
-        while let Some(url) = &self.to_fetch.iter().next() {  
-            let url = (*url).to_owned();
-            set_progress_bar_max(self.get_links_count());
-            self.i += 1;
-            inc_progress_bar();
+        while !self.to_fetch.is_empty() || !ongoing_requests.is_empty() {
+            for url in  self.to_fetch.clone().into_iter().take(CONCURRENT_REQUESTS - ongoing_requests.len()) {
+                let url = url.clone();
+                set_progress_bar_max(self.get_links_count());
+                inc_progress_bar();
+    
+                self.to_fetch.remove(&url);
+                self.fetched.insert(url.clone());
+    
+                if self.i % 200 == 0 {
+                    self.save_graph();
+                }
 
-            self.to_fetch.remove(&url);
-            self.fetched.insert(url.clone());
-
-            if self.i % 200 == 0 {
-                self.save_graph();
+                if url.is_media() || !url.is_insa() || url.is_black_listed() {
+                    print_progress_bar_info("Skip", &url.to_string(), Color::Yellow, Style::Bold);
+                    self.i += 1;
+                    continue;
+                    
+                }
+                self.i += 1;
+                ongoing_requests.push(Box::pin(Page::new(url.clone(), self.client.clone())));
             }
 
-            if url.is_media() || !url.is_insa() {
-                print_progress_bar_info("Skip", &url.to_string(), Color::Yellow, Style::Bold);
+            if ongoing_requests.is_empty() {
                 continue;
             }
 
-            let mut page = Page::new(url.clone(), self.client.clone()).await;
-            if page.is_err() && url.is_cas() {
-                page = Page::new(url.clone(), self.client.clone()).await;
-                if page.is_err() {
-                    print_progress_bar_info("Impossible to fetch", &url.to_string(), Color::Red, Style::Bold);
-                    continue;
-                }
-            }
+            let (page, _, remaining_requests) = futures::future::select_all(ongoing_requests).await;
+            ongoing_requests = remaining_requests;
+            self.i += 1;
 
             let page = if let Ok(page) = page {
                 page
             } else {
                 continue;
             };
+
             page.links.iter().for_each(|link| {
                 self.add_url_to_fetch_with_referer(page.url.clone(), link.clone(), page.get_status());
             });
-            print_progress_bar_info("Fetched", &url.to_string(), Color::Blue, Style::Bold);
-                        
+            print_progress_bar_info("Fetched", &page.get_url().to_string(), Color::Blue, Style::Bold);
+ 
         }
         finalize_progress_bar();
         self.save_graph();
@@ -270,9 +290,9 @@ impl UrlCollection {
         
         let mut nodes: HashMap<Url, u16> = HashMap::new();
 
-        for ((from, _), to) in self.last_fetch.iter() {
+        for ((from, status), to) in self.last_fetch.iter() {
             if !nodes.contains_key(from) {
-                nodes.insert(from.clone(), nodes.len() as u16);
+                nodes.insert(from.clone(), *status);
             }
             edges_csv.push(format!("{};{}",  from, to));
         }    

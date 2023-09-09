@@ -24,8 +24,18 @@ impl Url {
         hash
     }
 
+    pub fn is_black_listed(&self) -> bool {
+        self.url.starts_with("https://catalogue.insa-rouen.fr/cgi-bin/koha/opac-search.pl")
+    }
+
     pub fn is_media(&self) -> bool {
-        let Some(extension) = self.url.split('.').last() else { return false; };
+        let extension = if self.url.contains('?') {
+            let url = self.url.split('?').next().unwrap();
+            url
+        } else {
+            self.url.as_str()
+        };
+        let Some(extension) = extension.split('.').last() else { return false; };
 
         matches!(extension.to_lowercase().as_str(), "pdf" | "png" | "jpg" | "jpeg" | "gif" | "svg" | "ico" | "webp" | "bmp" | "tiff" | "tif" | "psd" | "raw" | "css" | "js")
     }
