@@ -67,7 +67,9 @@ impl Url {
         }
         let url = html_escape::decode_html_entities(&url).to_string();
         // TODO: clear trim_end_matches
-        let url = url
+        let binding = url
+            .replace('>', "");
+        let url = binding
             .trim_end_matches('/')
             .trim_end_matches('\\')
             .trim_end_matches('"')

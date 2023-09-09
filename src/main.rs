@@ -7,7 +7,7 @@ pub mod prelude;
 
 use console::{style, Term};
 
-use crate::page::PagesGraph;
+use crate::page::UrlCollection;
 
 const NAME_ASCII_ART: &str = r#"
  ___  ____  _____ _   _          _____ ___ _   _ ____  _____ ____  
@@ -29,22 +29,19 @@ async fn main() {
     );
     println!(
         "{}",
-        style("Please, enter a url to start crawling: ").green()
+        style("Please, enter a url to start crawling (nothing to start the scan): ").green()
     );
-    let url = term.read_line().unwrap();
-    let url = link::Url::parse(&url).unwrap();
-
-    println!(
-        "{}",
-        style("Please, the maximum distance from the root: ").green()
-    );
-    let distance = term.read_line().unwrap();
-    let distance = distance.parse::<u8>().unwrap();
-    let mut graph = PagesGraph::new();
-    let _ = graph.fetch_from(url, distance).await;
-    let links = graph.get_links();
-    for link in &links {
-        println!("- {}", link);
+    let mut url = String::from("empty");
+    let mut urls = vec![];
+    while !url.is_empty() {
+        url = term.read_line().unwrap();
+        if let Ok(url) = link::Url::parse(&url) {
+            urls.push(url);
+        } else if !url.is_empty() {
+            println!("{}", style("Please, enter a valid url: ").red());
+        }
     }
-    println!("{}", style(links.len()).green());
+
+    let mut graph = UrlCollection::new();
+    let _ = graph.fetch_from(urls).await;
 }

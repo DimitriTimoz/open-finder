@@ -1,22 +1,21 @@
-use petgraph::prelude::UnGraphMap;
 use progress_bar::*;
 use reqwest::{Client, ClientBuilder};
 use urlencoding;
 use rpassword::read_password;
-use std::{collections::{HashSet, HashMap}, fmt::Debug, fs::File, io::Write, thread, time::Duration, rc::Rc};
+use std::{collections::{HashSet, HashMap}, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc};
 
 use crate::{
     content::Content,
     link::{HackTraitVecUrlString, Url},
 };
 use errors::PageError::{self, *};
-
 pub struct Page {
     url: Url,
     referers: HashSet<Url>,
     links: HashSet<Url>,
     content: Option<Content>,
-    client: Rc<Client>
+    client: Rc<Client>,
+    status: u16,
 }
 
 impl Debug for Page {
@@ -38,7 +37,8 @@ impl Page {
             referers: HashSet::new(),
             links: HashSet::new(),
             content: None,
-            client
+            client,
+            status: 0,
         };
         page.fetch().await?;
         Ok(page)
@@ -52,6 +52,7 @@ impl Page {
                                 .map_err(ReqwestError)?;
                         
         // get links from the page
+        self.status = res.status().as_u16();
         let bytes = res.text().await.map_err(ReqwestError)?;
         self.content = Some(Content::new(bytes,  self.url.get_file_name()));
         self.links = if let Some(content) = &self.content {
@@ -88,17 +89,14 @@ impl Page {
         } else {
             return Err(NotContainsExecution);
         };
-        let username = std::env::var("CAS_USERNAME");
-        let username = if let Ok(username) = username {
-            username
-        } else {
-            print!("Username: ");
+        let username = std::env::var("CAS_USERNAME").unwrap_or_else(|_|{
+            print!("Password: ");
             std::io::stdout().flush().unwrap();        
             read_password().unwrap()
-        };
+        });
 
 
-        let password = std::env::var("CAS_PASSWORD").unwrap_or({
+        let password = std::env::var("CAS_PASSWORD").unwrap_or_else(|_|{
             print!("Password: ");
             std::io::stdout().flush().unwrap();        
             read_password().unwrap()
@@ -138,222 +136,156 @@ impl Page {
         
         Ok(())
     }
+
+    pub fn get_status(&self) -> u16 {
+        self.status
+    }
 }
 
-pub struct PagesGraph {
-    graph: UnGraphMap<[u8; 20], ()>,
-    pages: HashMap<Url, Option<Page>>,
-    urls: HashMap<[u8; 20], Url>, 
-    client: Rc<Client>
+pub struct UrlCollection {
+    to_fetch: HashSet<Url>,
+    fetched: HashSet<Url>,
+    client: Rc<Client>,
+    last_fetch: Vec<((Url, u16), Url)>,
+    i: usize,
 }
 
-impl Default for PagesGraph {
+impl Default for UrlCollection {
     fn default() -> Self {
-        PagesGraph {
-            graph: UnGraphMap::new(),
-            pages: HashMap::new(),
-            urls: HashMap::new(),
-            client: Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap())
+        UrlCollection {
+            to_fetch: HashSet::new(),
+            fetched: HashSet::new(),
+            client: Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap()),
+            i: 0,
+            last_fetch: Vec::new(),
         }
     }
     
 }
 
-impl PagesGraph {
+impl UrlCollection {
     pub fn new() -> Self {
-        PagesGraph::default()
+        UrlCollection::default()
     }
 
-    /// Add a not fetched url
-    pub fn add_url(&mut self, from: Url, to: Url) {
-        // Hash from
-        let from_hash = from.hash_sha128();
-        if !self.graph.contains_node(from_hash) {
-            self.graph.add_node(from_hash);
-        }
-        self.urls.insert(from_hash, from.clone());
-
-        // From Page
-        self.pages.entry(from).or_insert(None);
-
-        // Hash to
-        let to_hash = to.hash_sha128();
-        if !self.graph.contains_node(to_hash) {
-            self.graph.add_node(to_hash);
-        }
-        self.urls.insert(to_hash, to.clone());
-
-        // To Page
-        self.pages.entry(to).or_insert(None);
-
-        // Add edge
-        self.graph.add_edge(from_hash, to_hash, ());
-    }
-
-    /// Add a page to the graph withouth referer
-    pub fn add_page(&mut self, page: Page) {
-        let from_url = page.url.clone();
-        for link in page.links.iter() {
-            let url = link.clone();
-
-            self.add_url(from_url.clone(), url);
-        }
-        self.pages.insert(from_url, Some(page));
-    }
-
-    /// Add a page to the graph with a referer
-    pub fn add_page_with_referer(&mut self, page: Page, referer: Url) {
-        let url = page.url.clone();
-        self.add_url(referer, url);
-        self.add_page(page);
-    }
-
-    /// Remove an url from the graph
-    pub fn remove_node(&mut self, url: Url) {
-        let hash = url.hash_sha128();
-        self.graph.remove_node(hash);
-        self.pages.remove(&url);
-        self.urls.remove(&hash);
-    }
-
-    /// Closest to fetch first
-    pub fn get_closest_url_to_fetch(&self, start: Url) -> Vec<Url> {
-        let mut visited = HashMap::new();
-        self.get_closest_url_to_fetch_recursion(start, &mut visited)
-    }
-
-    // Recursion
-    fn get_closest_url_to_fetch_recursion(
-        &self,
-        start: Url,
-        visited: &mut HashMap<[u8; 20], ()>,
-    ) -> Vec<Url> {
-        let start = start.hash_sha128();
-        let neighbors = self.graph.neighbors(start);
-        let mut to_fetch = Vec::new();
-        visited.insert(start, ());
-
-        for neighbor in neighbors {
-            if visited.contains_key(&neighbor) {
-                continue;
-            }
-            if let Some(url) = self.urls.get(&neighbor) {
-                if let Some(page) = self.pages.get(url) {
-                    if page.is_none() {
-                        to_fetch.push(url.clone());
-                    }
-                }
-                to_fetch.extend(self.get_closest_url_to_fetch_recursion(url.clone(), visited));
-            } else {
-                println!("Error: neighbor not found");
-            }
+    /// Add a not fetched url with a referer
+    pub fn add_url_to_fetch_with_referer(&mut self, from: Url, to: Url, status: u16) {
+        if !self.to_fetch.contains(&to.clone()) && !self.fetched.contains(&to.clone()){
+            self.to_fetch.insert(to.clone());
         }
 
-        to_fetch
+        self.last_fetch.push(((from, status), to));
     }
 
-    pub fn get_links_count(&self) -> u32 {
-        self.urls.len() as u32
+     /// Add a not fetched url
+     pub fn add_url_to_fetch(&mut self, url: Url) {
+        if !self.to_fetch.contains(&url) && !self.fetched.contains(&url) {
+            self.to_fetch.insert(url);
+        }
+    }
+
+    pub fn get_links_count(&self) -> usize {
+        self.to_fetch.len() + self.fetched.len()
+    }
+
+    fn get_url_to_fetch(&self) -> impl Iterator<Item = &Url> {
+        self.to_fetch.iter()
     }
 
     /// Fetch all pages
-    pub async fn fetch_from(&mut self, start: Url, max_distance: u8) -> Result<(), PageError> {
-        let page = Page::new(start.clone(), self.client.clone()).await?;
-        init_progress_bar(1);
-        set_progress_bar_action("Fetching", Color::Green, Style::Bold);
-        let mut count = 0;
-        self.add_page(page);
+    pub async fn fetch_from(&mut self, starts: Vec<Url>) -> Result<(), PageError> {
+        init_progress_bar(starts.len());
 
-        for i in 0..max_distance {
-            let to_fetch = self.get_closest_url_to_fetch(start.clone());
-            print_progress_bar_info(
-                &format!("{} - New links", i + 1),
-                &format!("{}", to_fetch.len()),
-                Color::Cyan,
-                Style::Bold,
-            );
-
-            for url in to_fetch {
-                inc_progress_bar();
-
-                if i != max_distance - 1 {
-                    set_progress_bar_max(self.get_links_count().try_into().unwrap());
-                }
-                if count % 200 == 0 {
-                    self.save_graph();
-                }
-                count += 1;
-
-                if url.is_media() || !url.is_insa() {
-                    continue;
-                }
-
-                let mut page = Page::new(url.clone(), self.client.clone()).await;
-                if page.is_err() && url.is_cas() {
-                    page = Page::new(url.clone(), self.client.clone()).await;
-                    if page.is_err() {
-                        continue;
-                    }
-                }
-
-                let page = if let Ok(page) = page {
-                    page
-                } else {
-                    continue;
-                };
-                self.add_page_with_referer(page, url.clone());
-                print_progress_bar_info("Fetched", &url.to_string(), Color::Blue, Style::Bold);
-                thread::sleep(Duration::from_millis(10));
-            }
-            self.save_graph();
+        for url in starts {
+            self.add_url_to_fetch(url);
         }
-        set_progress_bar_action("Fetched", Color::Green, Style::Bold);
+
+        set_progress_bar_action("Fetching", Color::Green, Style::Bold);
+
+        while let Some(url) = &self.to_fetch.iter().next() {  
+            let url = (*url).to_owned();
+            set_progress_bar_max(self.get_links_count());
+            self.i += 1;
+            inc_progress_bar();
+
+            self.to_fetch.remove(&url);
+            self.fetched.insert(url.clone());
+
+            if self.i % 200 == 0 {
+                self.save_graph();
+            }
+
+            if url.is_media() || !url.is_insa() {
+                print_progress_bar_info("Skip", &url.to_string(), Color::Yellow, Style::Bold);
+                continue;
+            }
+
+            let mut page = Page::new(url.clone(), self.client.clone()).await;
+            if page.is_err() && url.is_cas() {
+                page = Page::new(url.clone(), self.client.clone()).await;
+                if page.is_err() {
+                    print_progress_bar_info("Impossible to fetch", &url.to_string(), Color::Red, Style::Bold);
+                    continue;
+                }
+            }
+
+            let page = if let Ok(page) = page {
+                page
+            } else {
+                continue;
+            };
+            page.links.iter().for_each(|link| {
+                self.add_url_to_fetch_with_referer(page.url.clone(), link.clone(), page.get_status());
+            });
+            print_progress_bar_info("Fetched", &url.to_string(), Color::Blue, Style::Bold);
+                        
+        }
         finalize_progress_bar();
+        self.save_graph();
         Ok(())
     }
 
-    /// Get all links in the graph
-    pub fn get_links(&self) -> Vec<Url> {
-        self.urls.values().cloned().collect()
-    }
 
     /// Save the graph to a file
     pub fn save_graph(&self) {
-        let mut nodes_csv: Vec<String> = vec![String::from("id;label")];
-        let mut edges_csv: Vec<String> = vec![String::from("Source;Target")];
+        // Check if the file exists and contains the header
+        let mut file_nodes = OpenOptions::new()
+                                    .append(true)
+                                    .open("nodes.csv").unwrap_or_else(|_| {
+            let mut file = File::create("nodes.csv").unwrap();
+            file.write_all(b"status;label\n").unwrap();
+            file
+        });
 
-        let mut nodes: HashMap<[u8; 20], u32> = HashMap::new();
-        for (i, node) in self.graph.nodes().enumerate() {
-            if let Some(url) = self.urls.get(&node) {
-                let url = url
-                    .to_string()
-                    .trim_start_matches("https://")
-                    .trim_start_matches("http://")
-                    .replace('\\', "/")
-                    .replace('\"', "\\\"")
-                    .replace(';', "%3B");
-                nodes_csv.push(format!("{};{}", i, url));
-                nodes.insert(node, i as u32);
+        let mut file_edges = OpenOptions::new()
+                                .append(true)
+                                .open("edges.csv").unwrap_or_else(|_| {
+            let mut file = File::create("edges.csv").unwrap();
+            file.write_all(b"source;target\n").unwrap();
+            file
+        });
+
+        let mut nodes_csv: Vec<String> = vec![];
+        let mut edges_csv: Vec<String> = vec![];
+        
+        let mut nodes: HashMap<Url, u16> = HashMap::new();
+
+        for ((from, _), to) in self.last_fetch.iter() {
+            if !nodes.contains_key(from) {
+                nodes.insert(from.clone(), nodes.len() as u16);
             }
-        }
+            edges_csv.push(format!("{};{}",  from, to));
+        }    
 
-        for (from, to, _) in self.graph.all_edges() {
-            let from = nodes.get(&from).unwrap();
-            let to = nodes.get(&to).unwrap();
-            edges_csv.push(format!("{};{}", from, to));
-        }
+        for (url, status) in nodes.iter() {
+            nodes_csv.push(format!("{};{}", status, url));
+        }    
 
-        // Copy template
-        let nodes_csv = nodes_csv.join("\n");
-        let edges_csv = edges_csv.join("\n");
-    
-
-        // Write to file
-        let mut file = File::create("nodes.csv").unwrap();
-        file.write_all(nodes_csv.as_bytes()).unwrap();
-
-        let mut file = File::create("edges.csv").unwrap();
-        file.write_all(edges_csv.as_bytes()).unwrap();
+        // Append the nodes to the file
+        file_nodes.write_all(nodes_csv.join("\n").as_bytes()).unwrap();
+        
+        // Append the edges to the file
+        file_edges.write_all(edges_csv.join("\n").as_bytes()).unwrap();
 
     }
 }
@@ -373,83 +305,22 @@ mod tests {
     use reqwest::ClientBuilder;
 
     use super::*;
-    #[tokio::test]
-    async fn test_graph() {
-        let mut graph = PagesGraph::new();
-        graph.add_url(
-            Url::parse(&"https://example.com").unwrap(),
-            Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap(),
-        );
-        graph.add_url(
-            Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap(),
-            Url::parse(&"https://example.com").unwrap(),
-        );
-
-        assert!(graph.graph.node_count() == 2);
-
-        graph.remove_node(Url::parse(&"https://example.com").unwrap());
-
-        assert!(graph.graph.node_count() == 1);
-
-        graph.add_url(
-            Url::parse(&"https://example.com").unwrap(),
-            Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap(),
-        );
-        graph.add_url(
-            Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap(),
-            Url::parse(&"https://example.com/login").unwrap(),
-        );
-        graph.add_url(
-            Url::parse(&"https://example.com/login").unwrap(),
-            Url::parse(&"https://example.com/register").unwrap(),
-        );
-        graph.add_url(
-            Url::parse(&"https://example.com/register").unwrap(),
-            Url::parse(&"https://example.com/login").unwrap(),
-        );
-    }
-
-    #[tokio::test]
-    async fn test_to_fetch_list() {
-        let client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
-
-        let mut graph = PagesGraph::new();
-        graph.add_url(
-            Url::parse(&"https://example.com").unwrap(),
-            Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap(),
-        );
-        graph.add_url(
-            Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap(),
-            Url::parse(&"https://example.com").unwrap(),
-        );
-
-        let list = graph.get_closest_url_to_fetch(Url::parse(&"https://example.com").unwrap());
-        assert!(list.len() == 1);
-
-        graph.add_page(
-            Page::new(Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap(), client.clone())
-                .await
-                .unwrap(),
-        );
-        let list = graph.get_closest_url_to_fetch(Url::parse(&"https://example.com").unwrap());
-        assert!(!list.is_empty());
-
-        let mut graph = PagesGraph::new();
-        graph.add_page(
-            Page::new(Url::parse(&"https://example.com").unwrap(), client.clone())
-                .await
-                .unwrap(),
-        );
-        let list = graph.get_closest_url_to_fetch(Url::parse(&"https://example.com").unwrap());
-
-        assert!(!list.is_empty());
-    }
-
+    
     #[tokio::test]
     async fn test_login_cas() {
         let client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
     
         let mut page = Page::new(Url::parse(&"https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), client).await.unwrap();
+        if page.is_cas() {
+            page.login_cas().await.unwrap();
+        }   
+    }
+
+    #[tokio::test]
+    async fn test_is_requiring_vpn() {
+        let client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
+    
+        let mut page = Page::new(Url::parse(&"https://support.insa-rouen.fr/").unwrap(), client).await.unwrap();
         if page.is_cas() {
             page.login_cas().await.unwrap();
         }   
