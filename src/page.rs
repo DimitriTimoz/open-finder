@@ -1,6 +1,6 @@
 use petgraph::prelude::UnGraphMap;
 use progress_bar::*;
-use reqwest::header::{HeaderMap, HeaderName};
+use urlencoding;
 use rpassword::read_password;
 use std::{collections::{HashSet, HashMap}, fmt::Debug, fs::File, io::Write, thread, time::Duration};
 
@@ -94,36 +94,53 @@ impl Page {
             .cookie_store(true)
             .build()
             .map_err(ReqwestError)?;
-        
-        std::io::stdout().flush().unwrap();
-        let password = read_password().unwrap();
-        let res = client
-                .post(&self.url.to_string())
-                .header("X-Content-Type-Options", "nosniff")
-                .header("X-Frame-Options", "DENY")
-                .header("X-XSS-Protection", "1; mode=block")
-                .header("Referer", self.url.to_string().as_str())
+
+        let username = std::env::var("CAS_USERNAME").unwrap_or({
+            print!("Username: ");
+            std::io::stdout().flush().unwrap();        
+            let mut username = String::new();
+            std::io::stdin().read_line(&mut username).unwrap();
+            username.trim().to_string()
+        });
+
+        let password = std::env::var("CAS_PASSWORD").unwrap_or({
+            print!("Password: ");
+            std::io::stdout().flush().unwrap();        
+            read_password().unwrap()
+        });
+
+
+        let req = client
+                .post(self.url.to_string())
+                .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.5")
+                .header("Accept-Encoding", "gzip, deflate, br")
                 .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Origin", "https://cas.insa-rouen.fr")
+                .header("Connection", "keep-alive")
+                .header("Referer", &*urlencoding::encode(self.url.to_string().as_str()))
+                .header("Cookie", "org.springframework.web.servlet.i18n.CookieLocaleResolver.LOCALE=en-US")
+                .header("Upgrade-Insecure-Requests", "1")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("Sec-Fetch-User", "?1")
                 .form(&[
-                    ("username", "dtimoz"),
+                    ("username", username.as_str()),
                     ("password", password.as_str()),
-                    ("execution", &execution),
-                ]).send().await.map_err(ReqwestError)?;
+                    ("execution", execution.as_str()),
+                    ("_eventId", "submit"),
+                    ("geolocation", ""),
+                    ("submit", "Login"),
+                ]).build().unwrap();
+
+        let res = client.execute(req).await.map_err(ReqwestError)?;
                     
-        println!("{}", res.text().await.unwrap());
-        // Get the login url
-
-        let url = format!("https://cas.insa-rouen.fr/cas/login?service={}", "https://moodle.insa-rouen.fr");
-
-        // Get the page
-        let res = client
-            .get(url + "&ticket=")
-            .send()
-            .await
-            .map_err(ReqwestError)?;
+        if !res.status().is_success() {
+            return Err(FailedToLogin);
+        }
         
-        
-
         Ok(())
     }
 }
@@ -329,6 +346,7 @@ mod errors {
     pub enum PageError {
         ReqwestError(reqwest::Error),
         NotContainsExecution,
+        FailedToLogin,
     }
 }
 #[cfg(test)]
