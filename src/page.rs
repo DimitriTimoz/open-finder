@@ -88,15 +88,15 @@ impl Page {
         } else {
             return Err(NotContainsExecution);
         };
-        println!("Execution: {:?}", std::env::vars().into_iter().collect::<Vec<_>>());
-        let username = std::env::var("CAS_USERNAME").unwrap_or({
+        let username = std::env::var("CAS_USERNAME");
+        let username = if let Ok(username) = username {
+            username
+        } else {
             print!("Username: ");
             std::io::stdout().flush().unwrap();        
-            let mut username = String::new();
-            std::io::stdin().read_line(&mut username).unwrap();
-            username.trim().to_string()
-        });
-        
+            read_password().unwrap()
+        };
+
 
         let password = std::env::var("CAS_PASSWORD").unwrap_or({
             print!("Password: ");
