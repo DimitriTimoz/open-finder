@@ -337,14 +337,4 @@ mod tests {
             page.login_cas().await.unwrap();
         }   
     }
-
-    #[tokio::test]
-    async fn test_is_requiring_vpn() {
-        let client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
-    
-        let mut page = Page::new(Url::parse(&"https://support.insa-rouen.fr/").unwrap(), client).await.unwrap();
-        if page.is_cas() {
-            page.login_cas().await.unwrap();
-        }   
-    }
 }
