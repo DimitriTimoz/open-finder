@@ -77,8 +77,9 @@ impl Url {
         }
         
         for (i, c) in url.clone().chars().enumerate() {
-            if !c.is_ascii() {
+            if !c.is_ascii()  {
                 url = url[..i].to_string();
+                break;
             }
         }
 
