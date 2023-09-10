@@ -71,11 +71,17 @@ impl Url {
     pub fn parse(v: &dyn ToString) -> Result<Self, UrlError> {
         use UrlError::*;
 
-        let url = v.to_string();
+        let mut url = v.to_string();
         if !url.contains("://") {
             return Err(NoProtocol);
         }
-        let url = html_escape::decode_html_entities(&url).to_string();
+        
+        for (i, c) in url.clone().chars().enumerate() {
+            if !c.is_ascii() {
+                url = url[..i].to_string();
+            }
+        }
+
         // TODO: clear trim_end_matches
         let binding = url
             .replace('>', "");
@@ -167,7 +173,7 @@ pub fn get_links(content: &str) -> HashSet<Url> {
         for (j, c) in content_p.iter().enumerate().take(end).skip(i) {
             let escape = b"\n ,\"'()<>\r";
             end = j;
-            if escape.contains(c) || c == &b'"' {
+            if !escape.is_ascii() ||  escape.contains(c){
                 break;
             }
         }
