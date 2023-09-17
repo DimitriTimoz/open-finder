@@ -149,7 +149,7 @@ impl Page {
         }
         
         self.content = Some(Content::new(res.text().await.map_err(ReqwestError)?,  self.url.get_file_name()));
-        
+
         Ok(())
     }
 
@@ -159,6 +159,10 @@ impl Page {
 
     pub fn get_url(&self) -> &Url {
         &self.url
+    }
+
+    pub fn get_content(&self) -> Option<&Content> {
+        self.content.as_ref()
     }
 }
 
