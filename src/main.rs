@@ -1,7 +1,7 @@
 pub mod content;
 pub mod link;
 pub mod collection;
-pub mod prtocols;
+pub mod protocols;
 pub mod manager;
 pub mod prelude;
 

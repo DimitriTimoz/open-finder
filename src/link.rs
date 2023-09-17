@@ -1,6 +1,6 @@
 use sha1::{Digest, Sha1};
 
-use crate::{link::errors::UrlError, prtocols::UriScheme};
+use crate::{link::errors::UrlError, protocols::UriScheme};
 use core::fmt::Debug;
 use std::{collections::HashSet, fmt::Display, hash::Hash, hash::Hasher};
 
