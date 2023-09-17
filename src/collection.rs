@@ -104,7 +104,7 @@ impl Page {
             return Err(NotContainsExecution);
         };
         let username = std::env::var("CAS_USERNAME").unwrap_or_else(|_|{
-            print!("Password: ");
+            print!("Username: ");
             std::io::stdout().flush().unwrap();        
             read_password().unwrap()
         });
