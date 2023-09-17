@@ -148,6 +148,8 @@ impl Page {
             return Err(FailedToLogin);
         }
         
+        self.content = Some(Content::new(res.text().await.map_err(ReqwestError)?,  self.url.get_file_name()));
+        
         Ok(())
     }
 
