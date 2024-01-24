@@ -53,7 +53,7 @@ impl Content {
     pub fn get_links(&self) -> HashSet<Url> {
         match self.kind {
             ContentType::Pdf => HashSet::new(),
-            _ => get_links(&self.bytes),
+            _ => get_links(&self.bytes, ""),
         }
     }
 

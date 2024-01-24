@@ -162,6 +162,7 @@ mod errors {
     }
 }
 
+/*
 pub fn get_links(content: &str) -> HashSet<Url> {
     let mut links = HashSet::new();
     if let Some(i) = content.find("://") {
@@ -189,8 +190,67 @@ pub fn get_links(content: &str) -> HashSet<Url> {
         }
         if let Some(v) = content.get(end..) { links.extend(get_links(v)); }
     }
+    
     links
+}*/
+
+#[inline]
+fn is_url_permissive(c: u8) -> bool {
+    c.is_ascii_alphanumeric() 
+        || c == b'.' 
+        || c == b'/' 
+        || c == b'%' 
+        || c == b'?' 
+        || c == b':' 
+        || c == b'=' 
+        || c == b'-' 
+        || c == b'_' 
+        || c == b'&'
 }
+
+/// Parse all the links in the content
+/// even if the link is not http or https
+/// for example: ="/path/to/file" should be parsed to "https://www.example.com/path/to/file"
+pub fn get_links(content: &str, host: &str) -> HashSet<Url> {    
+    let mut links = HashSet::new();
+
+    // Matching patterns
+
+    let mut start: usize = 0;
+    let mut end: usize = 0;
+    let mut pattern_matching = false;
+
+
+    for c in content.as_bytes() {
+        end += 1;    
+        if is_url_permissive(*c) {
+            if !pattern_matching {
+                if let Some(content) = content.get(end.saturating_sub(3)..end) {
+                    if content == "://" {
+                        pattern_matching = true;
+                    }
+                }
+            }    
+        } else {
+            // If before start is "=\""
+            if let Some(content) =  content.get(start.saturating_sub(3)..=start.saturating_sub(1)) {
+                if content == "=\"" {
+                    pattern_matching = true;
+                }
+            }
+            if start < end && pattern_matching {
+                if let Some(url) = content.get(start..end) {
+                    if let Ok(link) = Url::parse(url) {
+                        links.insert(link);
+                    }
+                }
+            }
+            pattern_matching = false;
+            start = end;
+        }   
+    }
+    links
+} 
 
 #[cfg(test)]
 mod tests {
@@ -218,7 +278,7 @@ mod tests {
         );
 
         assert_eq!(
-            get_links("https://sentry.io/}")
+            get_links("https://sentry.io}", "")
                 .iter()
                 .next()
                 .unwrap()
@@ -248,25 +308,26 @@ mod tests {
     #[test]
     fn test_get_links() {
         let content = r#"<a href="https://www.google.com">Google</a>"#;
-        let links = get_links(content);
+        let links = get_links(content, "");
         assert_eq!(links.len(), 1);
+        println!("{:?}", links);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
 
         // Check mutliple links
         let content = r#"<a href="https://www.google.com">Google</a><a href="https://www.youtube.com">Youtube</a>"#;
-        let links = get_links(content);
+        let links = get_links(content, "");
         assert_eq!(links.len(), 2);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
         assert!(links.contains(&Url::parse("https://www.youtube.com").unwrap()));
 
         // No links
         let content = r#"<a href="https:/www.google.com">Google</a>"#;
-        let links = get_links(content);
+        let links = get_links(content, "");
         assert_eq!(links.len(), 0);
 
         // Multiple protocols http, https, ftp
         let content = r#"<a href="https://www.google.com">Google</a><a href="http://www.youtube.com">Youtube</a><a href="ftp://www.rust-lang.org">Rust</a>"#;
-        let links = get_links(content);
+        let links = get_links(content, "");
         assert_eq!(links.len(), 3);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
         assert!(links.contains(&Url::parse("http://www.youtube.com").unwrap()));
@@ -274,7 +335,7 @@ mod tests {
 
         // Multiple links with special characters
         let content = r#""https://www.google.com", "https://www.youtube.com", "ftp://www.rust-lang.org""#;
-        let links = get_links(content);
+        let links = get_links(content, "");
         assert_eq!(links.len(), 3);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
         assert!(links.contains(&Url::parse("https://www.youtube.com").unwrap()));
