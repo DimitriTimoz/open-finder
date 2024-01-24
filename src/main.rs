@@ -29,7 +29,7 @@ async fn main() {
     );
     println!(
         "{}",
-        style("Please, enter a url to start crawling (nothing to start the scan): ").green()
+        style("Please, enter a url to start crawling (nothing to start the scan or resume the current scan): ").green()
     );
     let mut url = String::from("empty");
     let mut urls = vec![];
@@ -43,5 +43,16 @@ async fn main() {
     }
 
     let mut graph = UrlCollection::new();
-    let _ = graph.fetch_from(urls).await;
+    let err = if urls.is_empty() {
+        graph.load_graph().await;
+        graph.fetch().await
+
+    } else {
+        graph.fetch_from(urls).await
+    };
+
+    if let Err(err) = err {
+        println!("{:?}", style(err).red());
+    }
+
 }

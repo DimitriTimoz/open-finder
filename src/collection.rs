@@ -2,7 +2,7 @@ use progress_bar::*;
 use reqwest::{Client, ClientBuilder};
 use urlencoding;
 use rpassword::read_password;
-use std::{collections::{HashSet, HashMap}, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc};
+use std::{collections::HashSet, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc};
 use futures;
 
 use crate::{
@@ -80,7 +80,6 @@ impl Page {
 
     async fn login_cas(&mut self) -> Result<(), PageError> {
         // Pull the current page and get the execution       
-    
         let res = self.client
             .get(&self.url.to_string())
             .send()
@@ -213,18 +212,14 @@ impl UrlCollection {
         }
     }
 
+    /// Get the number of links 
     pub fn get_links_count(&self) -> usize {
         self.to_fetch.len() + self.fetched.len()
     }
 
-    /// Fetch all pages
-    pub async fn fetch_from(&mut self, starts: Vec<Url>) -> Result<(), PageError> {
-        init_progress_bar(starts.len());
-
-        for url in starts {
-            self.add_url_to_fetch(url);
-        }
-
+    /// Start the fetch
+    pub async fn fetch(&mut self) -> Result<(), PageError> {
+        init_progress_bar(self.get_links_count());
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
         let mut ongoing_requests = vec![];
 
@@ -274,6 +269,16 @@ impl UrlCollection {
         finalize_progress_bar();
         self.save_graph();
         Ok(())
+
+    }
+
+    /// Fetch all pages
+    pub async fn fetch_from(&mut self, starts: Vec<Url>) -> Result<(), PageError> {
+        for url in starts {
+            self.add_url_to_fetch(url);
+        }
+
+        self.fetch().await
     }
 
 
@@ -284,7 +289,7 @@ impl UrlCollection {
                                     .append(true)
                                     .open("nodes.csv").unwrap_or_else(|_| {
             let mut file = File::create("nodes.csv").unwrap();
-            file.write_all(b"status;label\n").unwrap();
+            file.write_all(b"status;label;fetched\n").unwrap();
             file
         });
 
@@ -300,11 +305,14 @@ impl UrlCollection {
         let mut edges_csv: Vec<String> = vec![];
         
         for (from, to) in self.last_fetch.iter() {
+            // Escape the ';' character
+            let from = from.to_string().replace(';', "%3B");
             edges_csv.push(format!("{};{}",  from, to));
         }    
 
         for (url, status) in self.to_save.iter() {
-            nodes_csv.push(format!("{};{}", status, url));
+            // Escape the ';' character
+            nodes_csv.push(format!("{};{};{}", status, url, self.fetched.contains(url)));
         }    
 
         // Append the nodes to the file
@@ -315,6 +323,43 @@ impl UrlCollection {
         file_edges.write_all(edges_csv.join("\n").as_bytes()).unwrap();
         file_edges.write_all(b"\n").unwrap();
 
+    }
+
+    /// Load the graph from a file
+    pub async fn load_graph(&mut self) {
+        // Check if the files exists
+        if File::open("nodes.csv").is_err() || File::open("edges.csv").is_err() {
+            return;
+        }
+
+        // Load the nodes
+        let nodes = std::fs::read_to_string("nodes.csv").unwrap();
+        let nodes = nodes.split('\n').collect::<Vec<&str>>();
+        for node in nodes.iter().skip(1) {
+            let node = node.split(';').collect::<Vec<&str>>();
+            if node.len() != 3 {
+                continue;
+            }
+            let url = Url::parse(node[1]).unwrap();
+            if node[2] == "true" && url.is_insa() && !url.is_media() {
+                self.fetched.insert(url);
+            } else {
+                self.to_fetch.insert(url);
+            }
+        }
+
+        // Load the edges
+        let edges = std::fs::read_to_string("edges.csv").unwrap();
+        let edges = edges.split('\n').collect::<Vec<&str>>();
+        for edge in edges.iter().skip(1) {
+            let edge = edge.split(';').collect::<Vec<&str>>();
+            if edge.len() != 2 {
+                continue;
+            }
+            let from = Url::parse(edge[0]).unwrap();
+            let to = Url::parse(edge[1]).unwrap();
+            self.last_fetch.push((from, to));
+        }
     }
 }
 
@@ -338,7 +383,7 @@ mod tests {
     async fn test_login_cas() {
         let client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
     
-        let mut page = Page::new(Url::parse(&"https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), client).await.unwrap();
+        let mut page = Page::new(Url::parse("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), client).await.unwrap();
         if page.is_cas() {
             page.login_cas().await.unwrap();
         }   

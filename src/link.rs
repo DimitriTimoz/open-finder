@@ -68,7 +68,7 @@ impl HackTraitVecUrlString for HashSet<Url> {
 }
 
 impl Url {
-    pub fn parse(v: &dyn ToString) -> Result<Self, UrlError> {
+    pub fn parse(v: impl ToString) -> Result<Self, UrlError> {
         use UrlError::*;
 
         let mut url = v.to_string();
@@ -100,6 +100,10 @@ impl Url {
             }
             None => return Err(NotValidUrl),
         };
+
+        // Escape the url
+        let url = url.replace(';', "%3B");
+
         Ok(Url {
             url: url.to_string(),
         })
@@ -179,7 +183,7 @@ pub fn get_links(content: &str) -> HashSet<Url> {
             }
         }
         if let Some(url) = content.get(start..end) {
-            if let Ok(link) = Url::parse(&url) {
+            if let Ok(link) = Url::parse(url) {
                 links.insert(link);
             }
         }
@@ -194,23 +198,23 @@ mod tests {
 
     #[test]
     fn test_url() {
-        let url = Url::parse(&"https://www.google.com").unwrap();
+        let url = Url::parse("https://www.google.com").unwrap();
 
         assert_eq!(url.url, "https://www.google.com");
         assert_eq!(url.get_host(), "www.google.com");
 
-        let url = Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
+        let url = Url::parse("https://www.youtube.com/watch?v=dQw4w9WgXcQ").unwrap();
         assert_eq!(url.get_host(), "www.youtube.com");
 
-        assert!(Url::parse(&"www.google.com").is_err());
-        assert!(Url::parse(&"http:/www.google.com").is_err());
-        assert!(Url::parse(&"http://www.rust-lang.org/").is_ok());
+        assert!(Url::parse("www.google.com").is_err());
+        assert!(Url::parse("http:/www.google.com").is_err());
+        assert!(Url::parse("http://www.rust-lang.org/").is_ok());
 
-        assert!(Url::parse(&"://www.rust-lang.org/").is_err());
+        assert!(Url::parse("://www.rust-lang.org/").is_err());
 
         assert_eq!(
-            Url::parse(&"https://www.google.com").unwrap(),
-            Url::parse(&"https://www.google.com/").unwrap()
+            Url::parse("https://www.google.com").unwrap(),
+            Url::parse("https://www.google.com/").unwrap()
         );
 
         assert_eq!(
@@ -219,24 +223,24 @@ mod tests {
                 .next()
                 .unwrap()
                 .to_string(),
-            Url::parse(&"https://sentry.io").unwrap().to_string()
+            Url::parse("https://sentry.io").unwrap().to_string()
         );
     }
 
     #[test]
     fn test_get_uri_scheme() {
         assert_eq!(
-            Url::parse(&"https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+            Url::parse("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
                 .unwrap()
                 .get_uri_scheme(),
             UriScheme::Https
         );
         assert_eq!(
-            Url::parse(&"ftp://example.com").unwrap().get_uri_scheme(),
+            Url::parse("ftp://example.com").unwrap().get_uri_scheme(),
             UriScheme::Ftp
         );
         assert_eq!(
-            Url::parse(&"Sftp://example.com").unwrap().get_uri_scheme(),
+            Url::parse("Sftp://example.com").unwrap().get_uri_scheme(),
             UriScheme::Sftp
         );
     }
@@ -246,14 +250,14 @@ mod tests {
         let content = r#"<a href="https://www.google.com">Google</a>"#;
         let links = get_links(content);
         assert_eq!(links.len(), 1);
-        assert!(links.contains(&Url::parse(&"https://www.google.com").unwrap()));
+        assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
 
         // Check mutliple links
         let content = r#"<a href="https://www.google.com">Google</a><a href="https://www.youtube.com">Youtube</a>"#;
         let links = get_links(content);
         assert_eq!(links.len(), 2);
-        assert!(links.contains(&Url::parse(&"https://www.google.com").unwrap()));
-        assert!(links.contains(&Url::parse(&"https://www.youtube.com").unwrap()));
+        assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
+        assert!(links.contains(&Url::parse("https://www.youtube.com").unwrap()));
 
         // No links
         let content = r#"<a href="https:/www.google.com">Google</a>"#;
@@ -264,16 +268,16 @@ mod tests {
         let content = r#"<a href="https://www.google.com">Google</a><a href="http://www.youtube.com">Youtube</a><a href="ftp://www.rust-lang.org">Rust</a>"#;
         let links = get_links(content);
         assert_eq!(links.len(), 3);
-        assert!(links.contains(&Url::parse(&"https://www.google.com").unwrap()));
-        assert!(links.contains(&Url::parse(&"http://www.youtube.com").unwrap()));
-        assert!(links.contains(&Url::parse(&"ftp://www.rust-lang.org").unwrap()));
+        assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
+        assert!(links.contains(&Url::parse("http://www.youtube.com").unwrap()));
+        assert!(links.contains(&Url::parse("ftp://www.rust-lang.org").unwrap()));
 
         // Multiple links with special characters
         let content = r#""https://www.google.com", "https://www.youtube.com", "ftp://www.rust-lang.org""#;
         let links = get_links(content);
         assert_eq!(links.len(), 3);
-        assert!(links.contains(&Url::parse(&"https://www.google.com").unwrap()));
-        assert!(links.contains(&Url::parse(&"https://www.youtube.com").unwrap()));
-        assert!(links.contains(&Url::parse(&"ftp://www.rust-lang.org").unwrap()));
+        assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
+        assert!(links.contains(&Url::parse("https://www.youtube.com").unwrap()));
+        assert!(links.contains(&Url::parse("ftp://www.rust-lang.org").unwrap()));
     }
 }
