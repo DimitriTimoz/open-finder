@@ -215,7 +215,6 @@ pub fn get_links(content: &str, host: &str) -> HashSet<Url> {
     let mut links = HashSet::new();
 
     // Matching patterns
-
     let mut start: usize = 0;
     let mut end: usize = 0;
     let mut pattern_matching = false;
@@ -233,14 +232,18 @@ pub fn get_links(content: &str, host: &str) -> HashSet<Url> {
             }    
         } else {
             // If before start is "=\""
-            if let Some(content) =  content.get(start.saturating_sub(3)..=start.saturating_sub(1)) {
-                if content == "=\"" {
-                    pattern_matching = true;
-                }
-            }
-            if start < end && pattern_matching {
-                if let Some(url) = content.get(start..end) {
+            if let Some(url) = content.get(start..end) {
+                let mut url = url.to_string();
+                if let Some(content) = content.get(start.saturating_sub(6)..=start.saturating_sub(1)) {
+                    if !pattern_matching && content.ends_with("href=\"") || content.ends_with("src=\"") {
+                        pattern_matching = true;
+                        url = format!("{}{}", host, url);
+                    } 
+                } 
+                
+                if start < end && pattern_matching {
                     if let Ok(link) = Url::parse(url) {
+                        println!("{} -> {}", link, link.get_host());
                         links.insert(link);
                     }
                 }
@@ -308,9 +311,9 @@ mod tests {
     #[test]
     fn test_get_links() {
         let content = r#"<a href="https://www.google.com">Google</a>"#;
-        let links = get_links(content, "");
+        let links = get_links(content, "https://www.google.com");
         assert_eq!(links.len(), 1);
-        println!("{:?}", links);
+        println!("data {:?}", links);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
 
         // Check mutliple links
@@ -340,5 +343,13 @@ mod tests {
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
         assert!(links.contains(&Url::parse("https://www.youtube.com").unwrap()));
         assert!(links.contains(&Url::parse("ftp://www.rust-lang.org").unwrap()));
+    }
+
+    #[test]
+    fn test_link_as_absolute_path() {
+        let content = r#"<a href="/path/to/file">Google</a>"#;
+        let links = get_links(content, "https://www.google.com");
+        assert_eq!(links.len(), 1);
+        assert!(links.contains(&Url::parse("https://www.google.com/path/to/file").unwrap()));
     }
 }
