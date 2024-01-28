@@ -45,9 +45,14 @@ async fn main() {
     let mut graph = UrlCollection::new();
     let err = if urls.is_empty() {
         graph.load_graph().await;
+        // Remove files 
+        let _ = std::fs::remove_file("edges.csv");
+        let _ = std::fs::remove_file("nodes.csv");        
         graph.fetch().await
-
     } else {
+        // Remove files 
+        let _ = std::fs::remove_file("edges.csv");
+        let _ = std::fs::remove_file("nodes.csv");        
         graph.fetch_from(urls).await
     };
 

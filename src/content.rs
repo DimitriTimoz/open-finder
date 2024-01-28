@@ -50,10 +50,10 @@ impl Content {
         Content { bytes, kind: ContentType::from(name.clone()) }
     }
     
-    pub fn get_links(&self) -> HashSet<Url> {
+    pub fn get_links(&self, url: Url) -> HashSet<Url> {
         match self.kind {
             ContentType::Pdf => HashSet::new(),
-            _ => get_links(&self.bytes, ""),
+            _ => get_links(&self.bytes, url),
         }
     }
 

@@ -48,7 +48,6 @@ impl Page {
     }
 
     async fn fetch(&mut self) -> Result<(), PageError> {
-        
         let res = self.client
                                 .get(&self.url.to_string())
                                 .send()
@@ -60,7 +59,7 @@ impl Page {
         let bytes = res.text().await.map_err(ReqwestError)?;
         self.content = Some(Content::new(bytes,  self.url.get_file_name()));
         self.links = if let Some(content) = &self.content {
-            content.get_links()
+            content.get_links(self.url.clone())
         } else {
             HashSet::<Url>::new()
         };
@@ -78,7 +77,7 @@ impl Page {
         self.url.is_cas()
     }
 
-    async fn login_cas(&mut self) -> Result<(), PageError> {
+    pub async fn login_cas(&mut self) -> Result<(), PageError> {
         // Pull the current page and get the execution       
         let res = self.client
             .get(&self.url.to_string())
@@ -198,7 +197,6 @@ impl UrlCollection {
         if !self.to_fetch.contains(&to.clone()) && !self.fetched.contains(&to.clone()){
             self.to_fetch.insert(to.clone());
             self.to_save.push((to.clone(), status));
-
         }
 
         self.last_fetch.push((from, to));
@@ -222,6 +220,8 @@ impl UrlCollection {
         init_progress_bar(self.get_links_count());
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
         let mut ongoing_requests = vec![];
+        
+        Page::new(Url::parse("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), self.client.clone()).await.unwrap().login_cas().await.unwrap();
 
         while !self.to_fetch.is_empty() || !ongoing_requests.is_empty() {
             for url in  self.to_fetch.clone().into_iter().take(CONCURRENT_REQUESTS - ongoing_requests.len()) {
@@ -235,14 +235,12 @@ impl UrlCollection {
                 if self.i % 200 == 0 {
                     self.save_graph();
                 }
-
+                self.i += 1;
                 if url.is_media() || !url.is_insa() || url.is_black_listed() {
                     print_progress_bar_info("Skip", &url.to_string(), Color::Yellow, Style::Bold);
-                    self.i += 1;
                     continue;
                     
                 }
-                self.i += 1;
                 ongoing_requests.push(Box::pin(Page::new(url.clone(), self.client.clone())));
             }
 
@@ -264,7 +262,6 @@ impl UrlCollection {
                 self.add_url_to_fetch_with_referer(page.url.clone(), link.clone(), page.get_status());
             });
             print_progress_bar_info("Fetched", &page.get_url().to_string(), Color::Blue, Style::Bold);
- 
         }
         finalize_progress_bar();
         self.save_graph();
@@ -283,7 +280,7 @@ impl UrlCollection {
 
 
     /// Save the graph to a file
-    pub fn save_graph(&self) {
+    pub fn save_graph(&mut self) {
         // Check if the file exists and contains the header
         let mut file_nodes = OpenOptions::new()
                                     .append(true)
@@ -305,8 +302,6 @@ impl UrlCollection {
         let mut edges_csv: Vec<String> = vec![];
         
         for (from, to) in self.last_fetch.iter() {
-            // Escape the ';' character
-            let from = from.to_string().replace(';', "%3B");
             edges_csv.push(format!("{};{}",  from, to));
         }    
 
@@ -315,6 +310,7 @@ impl UrlCollection {
             nodes_csv.push(format!("{};{};{}", status, url, self.fetched.contains(url)));
         }    
 
+        self.to_save.clear();
         // Append the nodes to the file
         file_nodes.write_all(nodes_csv.join("\n").as_bytes()).unwrap();
         file_nodes.write_all(b"\n").unwrap();

@@ -77,7 +77,7 @@ impl Url {
         }
         
         for (i, c) in url.clone().chars().enumerate() {
-            if !c.is_ascii()  {
+            if !is_url_permissive(c as u8) {
                 url = url[..i].to_string();
                 break;
             }
@@ -90,7 +90,8 @@ impl Url {
             .trim_end_matches('/')
             .trim_end_matches('\\')
             .trim_end_matches('"')
-            .trim_matches('}');
+            .trim_matches('}')
+            .trim_matches('#');
         let mut url_split = url.split("://");
         match url_split.next() {
             Some(v) => {
@@ -123,6 +124,17 @@ impl Url {
             .split('/')
             .next()
             .unwrap()
+    }
+
+    // Get the root of the url
+    #[inline]
+    pub fn get_root(&self) -> String {
+        // Example: https://www.google.com/path/to/file -> https://www.google.com
+        let mut root = self.url.split("://").next().unwrap().to_string();
+        root.push_str("://");
+        root.push_str(self.get_host());
+        root.push('/');
+        root
     }
 
     /// Get the file name 
@@ -211,14 +223,15 @@ fn is_url_permissive(c: u8) -> bool {
 /// Parse all the links in the content
 /// even if the link is not http or https
 /// for example: ="/path/to/file" should be parsed to "https://www.example.com/path/to/file"
-pub fn get_links(content: &str, host: &str) -> HashSet<Url> {    
+pub fn get_links(content: &str, url: Url) -> HashSet<Url> {    
     let mut links = HashSet::new();
-
     // Matching patterns
     let mut start: usize = 0;
     let mut end: usize = 0;
     let mut pattern_matching = false;
 
+    let host = url.get_root();
+    let path = url.to_string();
 
     for c in content.as_bytes() {
         end += 1;    
@@ -235,15 +248,19 @@ pub fn get_links(content: &str, host: &str) -> HashSet<Url> {
             if let Some(url) = content.get(start..end) {
                 let mut url = url.to_string();
                 if let Some(content) = content.get(start.saturating_sub(6)..=start.saturating_sub(1)) {
-                    if !pattern_matching && content.ends_with("href=\"") || content.ends_with("src=\"") {
+                    if !pattern_matching && (content.ends_with("href=\"") || content.ends_with("src=\""))  {
                         pattern_matching = true;
-                        url = format!("{}{}", host, url);
+                        if url.starts_with('/') {
+                            url = url[1..].to_string();
+                            url = format!("{}{}", host, url);
+                        } else {
+                            url = format!("{}{}", path, url);
+                        }
                     } 
                 } 
                 
                 if start < end && pattern_matching {
                     if let Ok(link) = Url::parse(url) {
-                        println!("{} -> {}", link, link.get_host());
                         links.insert(link);
                     }
                 }
@@ -281,7 +298,7 @@ mod tests {
         );
 
         assert_eq!(
-            get_links("https://sentry.io}", "")
+            get_links("https://sentry.io}", Url::parse("https://sentry.io").unwrap())
                 .iter()
                 .next()
                 .unwrap()
@@ -311,26 +328,25 @@ mod tests {
     #[test]
     fn test_get_links() {
         let content = r#"<a href="https://www.google.com">Google</a>"#;
-        let links = get_links(content, "https://www.google.com");
+        let links = get_links(content, Url::parse("https://www.google.com").unwrap());
         assert_eq!(links.len(), 1);
-        println!("data {:?}", links);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
 
         // Check mutliple links
         let content = r#"<a href="https://www.google.com">Google</a><a href="https://www.youtube.com">Youtube</a>"#;
-        let links = get_links(content, "");
+        let links = get_links(content, Url::parse("https://www.google.com").unwrap());
         assert_eq!(links.len(), 2);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
         assert!(links.contains(&Url::parse("https://www.youtube.com").unwrap()));
 
         // No links
-        let content = r#"<a href="https:/www.google.com">Google</a>"#;
-        let links = get_links(content, "");
-        assert_eq!(links.len(), 0);
+        let content = r#"<a href="/">Google</a>"#;
+        let links = get_links(content, Url::parse("https://www.google.com").unwrap());
+        assert_eq!(links.len(), 1);
 
         // Multiple protocols http, https, ftp
         let content = r#"<a href="https://www.google.com">Google</a><a href="http://www.youtube.com">Youtube</a><a href="ftp://www.rust-lang.org">Rust</a>"#;
-        let links = get_links(content, "");
+        let links = get_links(content, Url::parse("https://www.google.com").unwrap());
         assert_eq!(links.len(), 3);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
         assert!(links.contains(&Url::parse("http://www.youtube.com").unwrap()));
@@ -338,7 +354,7 @@ mod tests {
 
         // Multiple links with special characters
         let content = r#""https://www.google.com", "https://www.youtube.com", "ftp://www.rust-lang.org""#;
-        let links = get_links(content, "");
+        let links = get_links(content, Url::parse("https://www.google.com").unwrap());
         assert_eq!(links.len(), 3);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
         assert!(links.contains(&Url::parse("https://www.youtube.com").unwrap()));
@@ -348,8 +364,9 @@ mod tests {
     #[test]
     fn test_link_as_absolute_path() {
         let content = r#"<a href="/path/to/file">Google</a>"#;
-        let links = get_links(content, "https://www.google.com");
+        let links = get_links(content, Url::parse("https://www.google.com").unwrap());
         assert_eq!(links.len(), 1);
+        println!("{:?}", links);
         assert!(links.contains(&Url::parse("https://www.google.com/path/to/file").unwrap()));
     }
 }
