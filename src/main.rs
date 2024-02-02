@@ -6,6 +6,7 @@ pub mod manager;
 pub mod prelude;
 
 use console::{style, Term};
+use link::Url;
 
 use crate::collection::UrlCollection;
 
@@ -31,16 +32,7 @@ async fn main() {
         "{}",
         style("Please, enter a url to start crawling (nothing to start the scan or resume the current scan): ").green()
     );
-    let mut url = String::from("empty");
-    let mut urls = vec![];
-    while !url.is_empty() {
-        url = term.read_line().unwrap();
-        if let Ok(url) = link::Url::parse(&url) {
-            urls.push(url);
-        } else if !url.is_empty() {
-            println!("{}", style("Please, enter a valid url: ").red());
-        }
-    }
+    let urls = vec![Url::parse(String::from("https://wiki.insa-rouen.fr/doku.php?id=insa:iti:maquette:semestre_6:start")).unwrap()];
 
     let mut graph = UrlCollection::new();
     let err = if urls.is_empty() {

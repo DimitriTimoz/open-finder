@@ -287,6 +287,7 @@ impl UrlCollection {
 
     /// Save the graph to a file
     pub fn save_graph(&mut self) {
+        // TODO: use a database and do it in a separate thread
         // Check if the file exists and contains the header
         let mut file_nodes = OpenOptions::new()
                                     .append(true)
