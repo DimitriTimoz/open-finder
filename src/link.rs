@@ -1,8 +1,7 @@
-use sha1::{Digest, Sha1};
 
 use crate::{link::errors::UrlError, protocols::UriScheme};
 use core::fmt::Debug;
-use std::{collections::HashSet, fmt::Display, hash::Hash, hash::Hasher};
+use std::{collections::{hash_map::DefaultHasher, HashSet}, fmt::Display, hash::Hash, hash::Hasher};
 
 #[derive(Clone, PartialOrd, Ord)]
 pub struct Url {
@@ -16,12 +15,10 @@ impl Hash for Url {
 }
 
 impl Url {
-    pub fn hash_sha128(&self) -> [u8; 20] {
-        let mut hasher = Sha1::new();
-        hasher.update(self.url.clone());
-        let mut hash: [u8; 20] = Default::default();
-        hash.copy_from_slice(hasher.finalize().as_slice());
-        hash
+    pub fn get_hash(&self) -> u64 {
+        let mut s = DefaultHasher::new();
+        self.hash(&mut s);
+        s.finish()
     }
 
     pub fn is_black_listed(&self) -> bool {

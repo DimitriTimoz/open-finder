@@ -2,7 +2,7 @@ use progress_bar::*;
 use reqwest::{Client, ClientBuilder};
 use urlencoding;
 use rpassword::read_password;
-use std::{collections::HashSet, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc};
+use std::{collections::{HashSet, VecDeque}, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc};
 use futures;
 
 use crate::{
@@ -165,8 +165,8 @@ impl Page {
 }
 
 pub struct UrlCollection {
-    to_fetch: HashSet<Url>,
-    fetched: HashSet<Url>,
+    to_fetch: VecDeque<Url>,
+    known_url_hash: HashSet<u64>,
     client: Rc<Client>,
     last_fetch: Vec<(Url, Url)>,
     i: usize,
@@ -176,8 +176,8 @@ pub struct UrlCollection {
 impl Default for UrlCollection {
     fn default() -> Self {
         UrlCollection {
-            to_fetch: HashSet::new(),
-            fetched: HashSet::new(),
+            to_fetch: VecDeque::new(),
+            known_url_hash: HashSet::new(),
             client: Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap()),
             i: 0,
             last_fetch: Vec::new(),
@@ -194,8 +194,9 @@ impl UrlCollection {
 
     /// Add a not fetched url with a referer
     pub fn add_url_to_fetch_with_referer(&mut self, from: Url, to: Url, status: u16) {
-        if !self.to_fetch.contains(&to.clone()) && !self.fetched.contains(&to.clone()){
-            self.to_fetch.insert(to.clone());
+        if !self.known_url_hash.contains(&to.get_hash()){
+            self.known_url_hash.insert(to.get_hash());
+            self.to_fetch.push_back(to.clone());
             self.to_save.push((to.clone(), status));
         }
 
@@ -204,15 +205,16 @@ impl UrlCollection {
 
      /// Add a not fetched url
      pub fn add_url_to_fetch(&mut self, url: Url) {
-        if !self.to_fetch.contains(&url) && !self.fetched.contains(&url) {
-            self.to_fetch.insert(url.clone());
+        if !self.known_url_hash.contains(&url.get_hash()) {
+            self.known_url_hash.insert(url.get_hash());
+            self.to_fetch.push_back(url.clone());
             self.to_save.push((url, 000));
         }
     }
 
     /// Get the number of links 
     pub fn get_links_count(&self) -> usize {
-        self.to_fetch.len() + self.fetched.len()
+        self.known_url_hash.len()
     }
 
     /// Start the fetch
@@ -224,33 +226,35 @@ impl UrlCollection {
         Page::new(Url::parse("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), self.client.clone()).await.unwrap().login_cas().await.unwrap();
 
         while !self.to_fetch.is_empty() || !ongoing_requests.is_empty() {
-            for url in  self.to_fetch.clone().into_iter().take(CONCURRENT_REQUESTS - ongoing_requests.len()) {
-                let url = url.clone();
-                set_progress_bar_max(self.get_links_count());
-                inc_progress_bar();
-    
-                self.to_fetch.remove(&url);
-                self.fetched.insert(url.clone());
-    
-                if self.i % 200 == 0 {
-                    self.save_graph();
+            if ongoing_requests.len() < CONCURRENT_REQUESTS {
+                while let Some(url) = self.to_fetch.pop_front() {
+                    let url = url.clone();
+        
+                    self.known_url_hash.insert(url.get_hash());
+        
+                    if self.to_save.len() > 300 {
+                        self.save_graph();
+                    }
+                    self.i += 1;
+                    if url.is_media() || !url.is_insa() || url.is_black_listed() {
+                        print_progress_bar_info("Skip", &url.to_string(), Color::Yellow, Style::Bold);
+                        continue;
+                        
+                    }
+                    ongoing_requests.push(Box::pin(Page::new(url.clone(), self.client.clone())));
                 }
-                self.i += 1;
-                if url.is_media() || !url.is_insa() || url.is_black_listed() {
-                    print_progress_bar_info("Skip", &url.to_string(), Color::Yellow, Style::Bold);
-                    continue;
-                    
-                }
-                ongoing_requests.push(Box::pin(Page::new(url.clone(), self.client.clone())));
             }
+       
 
             if ongoing_requests.is_empty() {
+                print_progress_bar_info("Empty que", "No request", Color::Cyan, Style::Normal);
                 continue;
             }
 
             let (page, _, remaining_requests) = futures::future::select_all(ongoing_requests).await;
             ongoing_requests = remaining_requests;
             self.i += 1;
+            inc_progress_bar();
 
             let page = if let Ok(page) = page {
                 page
@@ -259,8 +263,10 @@ impl UrlCollection {
             };
 
             page.links.iter().for_each(|link| {
+    
                 self.add_url_to_fetch_with_referer(page.url.clone(), link.clone(), page.get_status());
             });
+            set_progress_bar_max(self.get_links_count());
             print_progress_bar_info("Fetched", &page.get_url().to_string(), Color::Blue, Style::Bold);
         }
         finalize_progress_bar();
@@ -305,9 +311,14 @@ impl UrlCollection {
             edges_csv.push(format!("{};{}",  from, to));
         }    
 
+        for url in self.to_fetch.iter() {
+            // Escape the ';' character
+            nodes_csv.push(format!("{};{};{}", 000, url, false));
+        }    
+
         for (url, status) in self.to_save.iter() {
             // Escape the ';' character
-            nodes_csv.push(format!("{};{};{}", status, url, self.fetched.contains(url)));
+            nodes_csv.push(format!("{};{};{}", status, url, self.known_url_hash.contains(&url.get_hash())));
         }    
 
         self.to_save.clear();
@@ -338,9 +349,9 @@ impl UrlCollection {
             }
             let url = Url::parse(node[1]).unwrap();
             if node[2] == "true" && url.is_insa() && !url.is_media() {
-                self.fetched.insert(url);
+                self.known_url_hash.insert(url.get_hash());
             } else {
-                self.to_fetch.insert(url);
+                self.to_fetch.push_back(url);
             }
         }
 
