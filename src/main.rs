@@ -32,7 +32,7 @@ async fn main() {
         "{}",
         style("Please, enter a url to start crawling (nothing to start the scan or resume the current scan): ").green()
     );
-    let urls = vec![Url::parse(String::from("https://wiki.insa-rouen.fr/doku.php?id=insa:iti:maquette:semestre_6:start")).unwrap()];
+    let urls = vec![Url::parse(String::from("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fwiki.insa-rouen.fr%2Fdoku.php%3Fid%3Dinsa%3Aiti%3Amaquette%3Asemestre_6%3Astart")).unwrap()];
 
     let mut graph = UrlCollection::new();
     let err = if urls.is_empty() {

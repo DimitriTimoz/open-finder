@@ -223,8 +223,6 @@ impl UrlCollection {
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
         let mut ongoing_requests = vec![];
         
-        Page::new(Url::parse("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), self.client.clone()).await.unwrap().login_cas().await.unwrap();
-
         while !self.to_fetch.is_empty() || !ongoing_requests.is_empty() {
             if ongoing_requests.len() < CONCURRENT_REQUESTS {
                 while let Some(url) = self.to_fetch.pop_front() {
@@ -311,6 +309,8 @@ impl UrlCollection {
         for (from, to) in self.last_fetch.iter() {
             edges_csv.push(format!("{};{}",  from, to));
         }    
+
+        self.last_fetch.clear();
 
         for url in self.to_fetch.iter() {
             // Escape the ';' character
