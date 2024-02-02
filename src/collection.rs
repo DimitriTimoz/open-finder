@@ -2,7 +2,7 @@ use progress_bar::*;
 use reqwest::{Client, ClientBuilder};
 use urlencoding;
 use rpassword::read_password;
-use std::{collections::{HashSet, VecDeque}, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc};
+use std::{collections::{HashSet, VecDeque}, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc, time::Duration};
 use futures;
 
 use crate::{
@@ -242,7 +242,7 @@ impl UrlCollection {
                     ongoing_requests.push(Box::pin(Page::new(url.clone(), self.client.clone())));
                 }
             }
-       
+            std::thread::sleep(Duration::from_millis(5));
 
             if ongoing_requests.is_empty() {
                 print_progress_bar_info("Empty que", "No request", Color::Cyan, Style::Normal);
