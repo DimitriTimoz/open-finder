@@ -6,8 +6,7 @@ use std::{collections::{HashSet, VecDeque}, fmt::Debug, fs::{File, OpenOptions},
 use futures;
 
 use crate::{
-    content::Content,
-    link::{HackTraitVecUrlString, Url},
+    content::Content, link::{HackTraitVecUrlString, Url}, protocols::UriScheme
 };
 use errors::PageError::{self, *};
 pub struct Page {
@@ -234,11 +233,8 @@ impl UrlCollection {
         
                     self.known_url_hash.insert(url.get_hash());
         
-                    if self.to_save.len() > 300 {
-                        self.save_graph();
-                    }
                     self.i += 1;
-                    if url.is_media() || !url.is_insa() || url.is_black_listed() {
+                    if (url.get_uri_scheme() == UriScheme::Http || url.get_uri_scheme() == UriScheme::Https) &&  url.is_media() || !url.is_insa() || url.is_black_listed() {
                         print_progress_bar_info("Skip", &url.to_string(), Color::Yellow, Style::Bold);
                         continue;
                         
@@ -249,7 +245,7 @@ impl UrlCollection {
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(50));
 
             if ongoing_requests.is_empty() {
                 print_progress_bar_info("Empty que", "No request", Color::Cyan, Style::Normal);
@@ -271,6 +267,10 @@ impl UrlCollection {
                 self.add_url_to_fetch_with_referer(page.url.clone(), link.clone(), page.get_status());
             });
             self.to_save.push((page.url.clone(), page.get_status()));
+            if self.to_save.len() > 300 {
+                self.save_graph();
+            }
+
             set_progress_bar_max(self.get_links_count());
             print_progress_bar_info("Fetched", &page.get_url().to_string(), Color::Blue, Style::Bold);
         }
