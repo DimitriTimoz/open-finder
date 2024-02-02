@@ -244,9 +244,12 @@ impl UrlCollection {
                         
                     }
                     ongoing_requests.push(Box::pin(Page::new(url.clone(), self.client.clone())));
+                    if ongoing_requests.len() >= CONCURRENT_REQUESTS {
+                        break;
+                    }
                 }
             }
-            std::thread::sleep(Duration::from_millis(5));
+            std::thread::sleep(Duration::from_millis(10));
 
             if ongoing_requests.is_empty() {
                 print_progress_bar_info("Empty que", "No request", Color::Cyan, Style::Normal);
