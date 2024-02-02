@@ -26,17 +26,14 @@ impl Url {
     }
 
     pub fn is_media(&self) -> bool {
-        let extension = if self.url.contains('?') {
-            let url = self.url.split('?').next().unwrap();
-            url
+        const MEDIAS_EXTENSIONS : [&str; 18] = ["pdf", "png", "jpg", "jpeg", "gif", "svg", "ico", "webp", "bmp", "tiff", "tif", "psd", "raw", "css", "js", "zip", "tar", "jar"];
+        if let Some(extension) = self.to_string().split('.').last().map(|ext| ext.to_lowercase()) {
+            // Vérifier si l'extension extraite est dans le tableau des extensions de médias
+            MEDIAS_EXTENSIONS.iter().any(|&media_ext| media_ext == extension)
         } else {
-            self.url.as_str()
-        };
-        let Some(extension) = extension.split('.').last() else { return false; };
-
-        matches!(extension.to_lowercase().as_str(), "pdf" | "png" | "jpg" | "jpeg" | "gif" | "svg" | "ico" | "webp" | "bmp" | "tiff" | "tif" | "psd" | "raw" | "css" | "js")
-    }
-
+            false
+        }
+        }
     pub fn is_insa(&self) -> bool {
         self.url.contains("insa-rouen.fr")
     }

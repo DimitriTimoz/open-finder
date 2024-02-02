@@ -65,7 +65,11 @@ impl Page {
         };
 
         if self.is_cas() {
-            self.login_cas().await?;
+            let cas_res = self.login_cas().await;
+            if cas_res.is_err() {
+                print_progress_bar_info("CAS", &format!("Failed cas login {:?}", cas_res.as_ref().err().unwrap()), Color::Red, Style::Bold);
+                cas_res?;
+            }
         }
 
         self.links.remove(&self.url);
@@ -168,6 +172,7 @@ pub struct UrlCollection {
     to_fetch: VecDeque<Url>,
     known_url_hash: HashSet<u64>,
     client: Rc<Client>,
+    #[cfg(feature = "graph")]
     last_fetch: Vec<(Url, Url)>,
     i: usize,
     to_save: Vec<(Url, u16)>,
@@ -176,10 +181,11 @@ pub struct UrlCollection {
 impl Default for UrlCollection {
     fn default() -> Self {
         UrlCollection {
-            to_fetch: VecDeque::new(),
-            known_url_hash: HashSet::new(),
+            to_fetch: VecDeque::with_capacity(2*1024*1024),
+            known_url_hash: HashSet::with_capacity(7*1024*1024),
             client: Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap()),
             i: 0,
+            #[cfg(feature = "graph")]
             last_fetch: Vec::new(),
             to_save: Vec::new(),
         }
@@ -197,9 +203,8 @@ impl UrlCollection {
         if !self.known_url_hash.contains(&to.get_hash()){
             self.known_url_hash.insert(to.get_hash());
             self.to_fetch.push_back(to.clone());
-            self.to_save.push((to.clone(), status));
         }
-
+        #[cfg(feature = "graph")]
         self.last_fetch.push((from, to));
     }
 
@@ -208,7 +213,6 @@ impl UrlCollection {
         if !self.known_url_hash.contains(&url.get_hash()) {
             self.known_url_hash.insert(url.get_hash());
             self.to_fetch.push_back(url.clone());
-            self.to_save.push((url, 000));
         }
     }
 
@@ -251,19 +255,19 @@ impl UrlCollection {
 
             let (page, _, remaining_requests) = futures::future::select_all(ongoing_requests).await;
             ongoing_requests = remaining_requests;
-            self.i += 1;
             inc_progress_bar();
 
             let page = if let Ok(page) = page {
                 page
             } else {
+                print_progress_bar_info("Error", &format!("{:?}", page.err().unwrap()), Color::Red, Style::Bold);
                 continue;
             };
 
             page.links.iter().for_each(|link| {
-    
                 self.add_url_to_fetch_with_referer(page.url.clone(), link.clone(), page.get_status());
             });
+            self.to_save.push((page.url.clone(), page.get_status()));
             set_progress_bar_max(self.get_links_count());
             print_progress_bar_info("Fetched", &page.get_url().to_string(), Color::Blue, Style::Bold);
         }
@@ -287,14 +291,23 @@ impl UrlCollection {
     pub fn save_graph(&mut self) {
         // TODO: use a database and do it in a separate thread
         // Check if the file exists and contains the header
-        let mut file_nodes = OpenOptions::new()
+        let mut file_fetcheds = OpenOptions::new()
                                     .append(true)
-                                    .open("nodes.csv").unwrap_or_else(|_| {
-            let mut file = File::create("nodes.csv").unwrap();
-            file.write_all(b"status;label;fetched\n").unwrap();
+                                    .open("fetcheds.csv").unwrap_or_else(|_| {
+            let mut file = File::create("fetcheds.csv").unwrap();
+            file.write_all(b"status;label\n").unwrap();
             file
         });
 
+        let mut file_to_fetch = OpenOptions::new()
+            .append(false)
+            .open("to_fetch.csv").unwrap_or_else(|_| {
+                let mut file = File::create("to_fetch.csv").unwrap();
+                file.write_all(b"url\n").unwrap();
+                file
+        });
+
+        #[cfg(feature = "graph")]
         let mut file_edges = OpenOptions::new()
                                 .append(true)
                                 .open("edges.csv").unwrap_or_else(|_| {
@@ -303,32 +316,39 @@ impl UrlCollection {
             file
         });
 
-        let mut nodes_csv: Vec<String> = vec![];
+        let mut fetcheds_csv: Vec<String> = vec![];
+        let mut to_fetch_csv: Vec<String> = vec![];
+        #[cfg(feature = "graph")]
         let mut edges_csv: Vec<String> = vec![];
         
+        #[cfg(feature = "graph")]
         for (from, to) in self.last_fetch.iter() {
             edges_csv.push(format!("{};{}",  from, to));
         }    
-
+        #[cfg(feature = "graph")]
         self.last_fetch.clear();
 
         for url in self.to_fetch.iter() {
-            // Escape the ';' character
-            nodes_csv.push(format!("{};{};{}", 000, url, false));
+            to_fetch_csv.push(format!("{}", url));
         }    
 
         for (url, status) in self.to_save.iter() {
-            // Escape the ';' character
-            nodes_csv.push(format!("{};{};{}", status, url, self.known_url_hash.contains(&url.get_hash())));
+            fetcheds_csv.push(format!("{};{}", status, url));
         }    
 
         self.to_save.clear();
-        // Append the nodes to the file
-        file_nodes.write_all(nodes_csv.join("\n").as_bytes()).unwrap();
-        file_nodes.write_all(b"\n").unwrap();
+        // Append the fetcheds to the file
+        file_fetcheds.write_all(fetcheds_csv.join("\n").as_bytes()).unwrap();
+        file_fetcheds.write_all(b"\n").unwrap();
+
+        // Append the to_fetch to the file
+        file_to_fetch.write_all(to_fetch_csv.join("\n").as_bytes()).unwrap();
+        file_to_fetch.write_all(b"\n").unwrap();
         
         // Append the edges to the file
+        #[cfg(feature = "graph")]
         file_edges.write_all(edges_csv.join("\n").as_bytes()).unwrap();
+        #[cfg(feature = "graph")]
         file_edges.write_all(b"\n").unwrap();
 
     }
@@ -364,9 +384,12 @@ impl UrlCollection {
             if edge.len() != 2 {
                 continue;
             }
-            let from = Url::parse(edge[0]).unwrap();
-            let to = Url::parse(edge[1]).unwrap();
-            self.last_fetch.push((from, to));
+            #[cfg(feature = "graph")]
+            {
+                let from = Url::parse(edge[0]).unwrap();
+                let to = Url::parse(edge[1]).unwrap();
+                self.last_fetch.push((from, to));
+            }
         }
     }
 }

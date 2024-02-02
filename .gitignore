@@ -2,3 +2,5 @@
 graph.json
 edges.csv
 nodes.csv
+to_fetch.csv
+fetcheds.csv
