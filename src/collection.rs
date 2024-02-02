@@ -5,6 +5,8 @@ use rpassword::read_password;
 use std::{collections::{HashSet, VecDeque}, fmt::Debug, fs::{File, OpenOptions}, io::Write, rc::Rc, time::Duration};
 use futures;
 
+// TODO: blacklist personal pages
+// TODO: check position of :// to detect if :// is in a get parameter
 use crate::{
     content::Content, link::{HackTraitVecUrlString, Url}, protocols::UriScheme
 };
@@ -236,6 +238,7 @@ impl UrlCollection {
                     self.i += 1;
                     if (url.get_uri_scheme() == UriScheme::Http || url.get_uri_scheme() == UriScheme::Https) &&  url.is_media() || !url.is_insa() || url.is_black_listed() {
                         print_progress_bar_info("Skip", &url.to_string(), Color::Yellow, Style::Bold);
+                        self.to_save.push((url.clone(), 0));
                         continue;
                         
                     }
@@ -245,7 +248,7 @@ impl UrlCollection {
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(50));
+            std::thread::sleep(Duration::from_millis(30));
 
             if ongoing_requests.is_empty() {
                 print_progress_bar_info("Empty que", "No request", Color::Cyan, Style::Normal);
