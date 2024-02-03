@@ -200,7 +200,7 @@ impl UrlCollection {
     }
 
     /// Add a not fetched url with a referer
-    pub fn add_url_to_fetch_with_referer(&mut self, from: Url, to: Url, status: u16) {
+    pub fn add_url_to_fetch_with_referer(&mut self, _from: Url, to: Url, _status: u16) {
         if !self.known_url_hash.contains(&to.get_hash()){
             self.known_url_hash.insert(to.get_hash());
             self.to_fetch.push_back(to.clone());
@@ -418,7 +418,7 @@ mod tests {
     
     #[tokio::test]
     async fn test_login_cas() {
-        let client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
+        let _client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
     
        // let mut page = Page::new(Url::parse("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), client).await.unwrap();
         //if page.is_cas() {

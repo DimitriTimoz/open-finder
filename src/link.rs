@@ -23,6 +23,7 @@ impl Url {
 
     pub fn is_black_listed(&self) -> bool {
         self.url.starts_with("https://catalogue.insa-rouen.fr/cgi-bin/koha/opac-search.pl")
+        || self.url.starts_with("https://qualite.insa-rouen.fr")
     }
 
     pub fn is_media(&self) -> bool {
@@ -221,46 +222,46 @@ pub fn get_links(content: &str, url: Url) -> HashSet<Url> {
     let mut links = HashSet::new();
     // Matching patterns
     let mut start: usize = 0;
-    let mut end: usize = 0;
     let mut pattern_matching = false;
-
+    let mut pattern_matching_pos = 0;
     let host = url.get_root();
     let path = url.to_string();
 
-    for c in content.as_bytes() {
-        end += 1;    
+    for (end, c) in content.as_bytes().iter().enumerate() {
         if is_url_permissive(*c) {
             if !pattern_matching {
-                if let Some(content) = content.get(end.saturating_sub(3)..end) {
+                if let Some(content) = content.get(end.saturating_sub(2)..=end) {
                     if content == "://" {
                         pattern_matching = true;
+                        pattern_matching_pos = end.saturating_sub(2);
                     }
                 }
             }    
         } else {
             // If before start is "=\""
-            if let Some(url) = content.get(start..end) {
+            if let Some(url) = content.get(start..=end) {
                 let mut url = url.to_string();
                 if let Some(content) = content.get(start.saturating_sub(6)..=start.saturating_sub(1)) {
-                    if !pattern_matching && (content.ends_with("href=\"") || content.ends_with("src=\""))  {
-                        pattern_matching = true;
+                    if (content.ends_with("src=\"") || content.ends_with("href=\"")) && (pattern_matching_pos.saturating_sub(start) >= 6 || !pattern_matching)  {
                         if url.starts_with('/') {
                             url = url[1..].to_string();
                             url = format!("{}{}", host, url);
                         } else {
                             url = format!("{}{}", path, url);
                         }
+
+                        pattern_matching = true;
                     } 
                 } 
                 
-                if start < end && pattern_matching {
+                if start <= end && pattern_matching {
                     if let Ok(link) = Url::parse(url) {
                         links.insert(link);
                     }
                 }
             }
             pattern_matching = false;
-            start = end;
+            start = end+1;
         }   
     }
     links
@@ -353,6 +354,13 @@ mod tests {
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
         assert!(links.contains(&Url::parse("https://www.youtube.com").unwrap()));
         assert!(links.contains(&Url::parse("ftp://www.rust-lang.org").unwrap()));
+
+        // Test href with an url as get parameter
+        let content = r#"<a href="?link=https://www.youtube.com">Google</a>"#;
+        let links = get_links(content, Url::parse("https://www.google.com").unwrap());
+        println!("{:?}", links);
+        assert_eq!(links.len(), 1);
+        assert!(links.contains(&Url::parse("https://www.google.com?link=https://www.youtube.com").unwrap()));
     }
 
     #[test]
