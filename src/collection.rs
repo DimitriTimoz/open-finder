@@ -6,7 +6,6 @@ use std::{collections::{HashSet, VecDeque}, fmt::Debug, fs::{File, OpenOptions},
 use futures;
 
 // TODO: blacklist personal pages
-// TODO: check position of :// to detect if :// is in a get parameter
 use crate::{
     content::Content, link::{HackTraitVecUrlString, Url}, protocols::UriScheme
 };
