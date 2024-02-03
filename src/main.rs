@@ -5,6 +5,8 @@ pub mod protocols;
 pub mod manager;
 pub mod prelude;
 
+use std::fs::File;
+
 use console::{style, Term};
 use link::Url;
 
@@ -35,16 +37,14 @@ async fn main() {
     let urls = vec![Url::parse(String::from("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fwiki.insa-rouen.fr%2Fdoku.php%3Fid%3Dinsa%3Aiti%3Amaquette%3Asemestre_6%3Astart")).unwrap()];
 
     let mut graph = UrlCollection::new();
-    let err = if urls.is_empty() {
+    let err = if File::open("fetcheds.csv").is_ok() && File::open("to_fetch.csv").is_ok() {
         graph.load_graph().await;
         // Remove files 
-        let _ = std::fs::remove_file("edges.csv");
-        let _ = std::fs::remove_file("nodes.csv");        
         graph.fetch().await
     } else {
         // Remove files 
-        let _ = std::fs::remove_file("edges.csv");
-        let _ = std::fs::remove_file("nodes.csv");        
+        let _ = std::fs::remove_file("fetcheds.csv");
+        let _ = std::fs::remove_file("to_fetch.csv");        
         graph.fetch_from(urls).await
     };
 

@@ -226,7 +226,7 @@ impl UrlCollection {
         init_progress_bar(self.get_links_count());
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
         let mut ongoing_requests = vec![];
-        
+        set_progress_bar_progression(self.i);
         while !self.to_fetch.is_empty() || !ongoing_requests.is_empty() {
             if ongoing_requests.len() < CONCURRENT_REQUESTS {
                 while let Some(url) = self.to_fetch.pop_front() {
@@ -361,41 +361,29 @@ impl UrlCollection {
     /// Load the graph from a file
     pub async fn load_graph(&mut self) {
         // Check if the files exists
-        if File::open("nodes.csv").is_err() || File::open("edges.csv").is_err() {
+        if File::open("to_fetch.csv").is_err() || File::open("fetcheds.csv").is_err() {
             return;
         }
 
-        // Load the nodes
-        let nodes = std::fs::read_to_string("nodes.csv").unwrap();
-        let nodes = nodes.split('\n').collect::<Vec<&str>>();
-        for node in nodes.iter().skip(1) {
-            let node = node.split(';').collect::<Vec<&str>>();
-            if node.len() != 3 {
-                continue;
-            }
-            let url = Url::parse(node[1]).unwrap();
-            if node[2] == "true" && url.is_insa() && !url.is_media() {
-                self.known_url_hash.insert(url.get_hash());
-            } else {
-                self.to_fetch.push_back(url);
+        // Load the to_fetch
+        let to_fetch = std::fs::read_to_string("to_fetch.csv").unwrap();
+        for url in to_fetch.lines().skip(1) {
+            if let Ok(url) = Url::parse(url) {
+                self.add_url_to_fetch(url);
             }
         }
 
-        // Load the edges
-        let edges = std::fs::read_to_string("edges.csv").unwrap();
-        let edges = edges.split('\n').collect::<Vec<&str>>();
-        for edge in edges.iter().skip(1) {
-            let edge = edge.split(';').collect::<Vec<&str>>();
-            if edge.len() != 2 {
-                continue;
-            }
-            #[cfg(feature = "graph")]
-            {
-                let from = Url::parse(edge[0]).unwrap();
-                let to = Url::parse(edge[1]).unwrap();
-                self.last_fetch.push((from, to));
+        // Load the fetcheds
+        let fetcheds = std::fs::read_to_string("fetcheds.csv").unwrap();
+        for line in fetcheds.lines().skip(1) {
+            let mut parts = line.split(';');
+            let url = parts.nth(1).unwrap();
+            if let Ok(url) = Url::parse(url) {
+                self.known_url_hash.insert(url.get_hash());
+                self.i += 1;
             }
         }
+        
     }
 }
 
