@@ -1,7 +1,12 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, fs::File};
+
+use futures::executor::block_on;
+use meilisearch_sdk::Client;
+use serde::{Deserialize, Serialize};
 
 use crate::link::{get_links, Url};
 
+#[derive(Clone, Serialize, Deserialize)]
 pub enum ContentType {
     Html,
     Css,
@@ -46,6 +51,14 @@ impl ContentType {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Document {
+    url: Url,
+    content: String,
+    kind: ContentType,
+    hash: String,
+}
+
 pub struct Content {
     bytes: String,
     kind: ContentType,
@@ -53,7 +66,34 @@ pub struct Content {
 
 impl Content {
     pub fn new(bytes: String, name: String) -> Self {
-        Content { kind: ContentType::from(name.clone(), &bytes), bytes }
+        Content { 
+            kind: ContentType::from(name.clone(),
+            &bytes),
+            bytes,
+         }
+    }
+
+    fn to_document(&self, url: Url) -> Document {
+        Document {
+            url,
+            content: self.to_text().unwrap_or_default(),
+            kind: self.kind.clone(),
+            hash: format!("{:x}", md5::compute(&self.bytes)),
+        }
+    }
+
+    pub fn publish(&self, url: Url)  {
+        block_on(async move {
+            let document = self.to_document(url);
+            let client = Client::new("http://localhost:7700", Some("key"));
+            // adding documents
+            let res = client
+                .index("docs")
+                .add_documents(&[document], Some("hash"))
+                .await;
+
+            println!("{:?}", res);
+        });
     }
     
     pub fn get_links(&self, url: Url) -> HashSet<Url> {

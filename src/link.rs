@@ -1,9 +1,11 @@
 
+use serde::{Deserialize, Serialize};
+
 use crate::{link::errors::UrlError, protocols::UriScheme};
 use core::fmt::Debug;
 use std::{collections::{hash_map::DefaultHasher, HashSet}, fmt::Display, hash::Hash, hash::Hasher};
 
-#[derive(Clone, PartialOrd, Ord)]
+#[derive(Clone, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Url {
     url: String,
 }

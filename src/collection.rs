@@ -74,10 +74,7 @@ impl Page {
             HashSet::<Url>::new()
         };
         if let Some(content) = self.content.as_ref() {
-            if let Some(text) = content.to_text() {
-                self.text = Some(text);
-            }
-            
+            content.publish(self.url.clone());            
         }
 
         self.links.remove(&self.url);
