@@ -13,11 +13,11 @@ pub enum ContentType {
     Other,
 }
 
-impl From<String> for ContentType {
-    fn from(file_name: String) -> Self {
+impl ContentType {
+    fn from(file_name: String, content: &str) -> Self {
         let file_name = file_name.to_lowercase();
         match file_name.split('.').last() {
-            Some("html") => ContentType::Html,
+            Some("html") | Some("htm") => ContentType::Html,
             Some("pdf") => ContentType::Pdf,
             Some("png") => ContentType::Image,
             Some("jpg") => ContentType::Image,
@@ -35,7 +35,13 @@ impl From<String> for ContentType {
             Some("js") => ContentType::Js,
             Some("json") => ContentType::Json,
             Some("xml") => ContentType::Xml,
-            _ => ContentType::Other,
+            _ => {
+                if content.trim_start().starts_with("<!DOCTYPE html>" ) {
+                    ContentType::Html
+                } else {
+                    ContentType::Other
+                }
+            }
         }
     }
 }
@@ -47,7 +53,7 @@ pub struct Content {
 
 impl Content {
     pub fn new(bytes: String, name: String) -> Self {
-        Content { bytes, kind: ContentType::from(name.clone()) }
+        Content { kind: ContentType::from(name.clone(), &bytes), bytes }
     }
     
     pub fn get_links(&self, url: Url) -> HashSet<Url> {
@@ -59,5 +65,15 @@ impl Content {
 
     pub fn get_bytes(&self) -> &str {
         &self.bytes
+    }
+
+    pub fn to_text(&self) -> Option<String> {
+        match self.kind {
+            ContentType::Html => {
+                let document = html2text::from_read(self.bytes.as_bytes(), 1000);
+                Some(document)
+            }
+            _ => None,
+        }
     }
 }

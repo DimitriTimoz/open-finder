@@ -16,6 +16,7 @@ pub struct Page {
     links: HashSet<Url>,
     content: Option<Content>,
     client: Rc<Client>,
+    text: Option<String>,
     status: u16,
 }
 
@@ -42,6 +43,7 @@ impl Page {
             content: None,
             client,
             status: 0,
+            text: None,
         };
         page.fetch().await?;
         Ok(page)
@@ -54,6 +56,14 @@ impl Page {
                                 .await
                                 .map_err(ReqwestError)?;
                         
+        if Url::parse(res.url().to_string()).map_err(|_| PageError::InvalidFinalUrl)?.is_cas() {
+            let cas_res = self.login_cas().await;
+            if cas_res.is_err() {
+                print_progress_bar_info("CAS", &format!("Failed cas login {:?}", cas_res.as_ref().err().unwrap()), Color::Red, Style::Bold);
+                cas_res?;
+            }
+        }
+                        
         // get links from the page
         self.status = res.status().as_u16();
         let bytes = res.text().await.map_err(ReqwestError)?;
@@ -63,13 +73,11 @@ impl Page {
         } else {
             HashSet::<Url>::new()
         };
-
-        if self.is_cas() {
-            let cas_res = self.login_cas().await;
-            if cas_res.is_err() {
-                print_progress_bar_info("CAS", &format!("Failed cas login {:?}", cas_res.as_ref().err().unwrap()), Color::Red, Style::Bold);
-                cas_res?;
+        if let Some(content) = self.content.as_ref() {
+            if let Some(text) = content.to_text() {
+                self.text = Some(text);
             }
+            
         }
 
         self.links.remove(&self.url);
@@ -395,6 +403,7 @@ mod errors {
         ReqwestError(reqwest::Error),
         NotContainsExecution,
         FailedToLogin,
+        InvalidFinalUrl,
     }
 }
 #[cfg(test)]

@@ -78,15 +78,9 @@ impl Url {
             }
         }
 
-        // TODO: clear trim_end_matches
-        let binding = url
-            .replace('>', "");
-        let url = binding
+        let url = url
             .trim_end_matches('/')
-            .trim_end_matches('\\')
-            .trim_end_matches('"')
-            .trim_matches('}')
-            .trim_matches('#');
+            .trim_end_matches('#');
         let mut url_split = url.split("://");
         match url_split.next() {
             Some(v) => {
