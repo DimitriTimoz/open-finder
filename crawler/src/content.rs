@@ -72,10 +72,10 @@ impl Content {
         }
     }
 
-    fn to_document(&self, url: Url) -> Document {
+    async fn to_document(&self, url: Url) -> Document {
         Document {
             url,
-            content: self.to_text().unwrap_or_default(),
+            content: self.to_text().await.unwrap_or_default(),
             kind: self.kind.clone(),
             hash: format!("{:x}", md5::compute(&self.bytes)),
         }
@@ -83,7 +83,7 @@ impl Content {
 
     pub fn publish(&self, url: Url) {
         block_on(async move {
-            let document = self.to_document(url);
+            let document = self.to_document(url).await;
             let client = Client::new("http://localhost:7700", Some("key"));
             // adding documents
             let res = client
@@ -106,11 +106,12 @@ impl Content {
         &self.bytes
     }
 
-    pub fn to_text(&self) -> Option<String> {
+    pub async fn to_text(&self) -> Option<String> {
         match self.kind {
             ContentType::Html => {
-                let document = html2text::from_read(self.bytes.as_bytes(), 1000);
-                Some(document)
+                let mut text = String::with_capacity(100);
+                txt_extractor::extract_text(&self.bytes, &mut text).await;
+                Some(text)
             }
             _ => None,
         }

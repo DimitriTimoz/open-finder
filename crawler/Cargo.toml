@@ -1,4 +1,3 @@
-workspace = { members = ["txt-extractor"] }
 [package]
 name = "open-finder"
 version = "0.1.0"
@@ -21,4 +20,4 @@ meilisearch-sdk = "0.24.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 md5 = "0.7.0"
-txt_extractor = { path = "../txt-extractor" }
+txt-extractor = { path = "../txt-extractor" }
