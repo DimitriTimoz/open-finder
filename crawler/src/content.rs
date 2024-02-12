@@ -41,7 +41,7 @@ impl ContentType {
             Some("json") => ContentType::Json,
             Some("xml") => ContentType::Xml,
             _ => {
-                if content.trim_start().starts_with("<!DOCTYPE html>" ) {
+                if content.trim_start().starts_with("<!DOCTYPE html>") {
                     ContentType::Html
                 } else {
                     ContentType::Other
@@ -66,11 +66,10 @@ pub struct Content {
 
 impl Content {
     pub fn new(bytes: String, name: String) -> Self {
-        Content { 
-            kind: ContentType::from(name.clone(),
-            &bytes),
+        Content {
+            kind: ContentType::from(name.clone(), &bytes),
             bytes,
-         }
+        }
     }
 
     fn to_document(&self, url: Url) -> Document {
@@ -82,7 +81,7 @@ impl Content {
         }
     }
 
-    pub fn publish(&self, url: Url)  {
+    pub fn publish(&self, url: Url) {
         block_on(async move {
             let document = self.to_document(url);
             let client = Client::new("http://localhost:7700", Some("key"));
@@ -95,7 +94,7 @@ impl Content {
             println!("{:?}", res);
         });
     }
-    
+
     pub fn get_links(&self, url: Url) -> HashSet<Url> {
         match self.kind {
             ContentType::Pdf => HashSet::new(),

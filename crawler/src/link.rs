@@ -1,9 +1,13 @@
-
 use serde::{Deserialize, Serialize};
 
 use crate::{link::errors::UrlError, protocols::UriScheme};
 use core::fmt::Debug;
-use std::{collections::{hash_map::DefaultHasher, HashSet}, fmt::Display, hash::Hash, hash::Hasher};
+use std::{
+    collections::{hash_map::DefaultHasher, HashSet},
+    fmt::Display,
+    hash::Hash,
+    hash::Hasher,
+};
 
 #[derive(Clone, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Url {
@@ -24,19 +28,30 @@ impl Url {
     }
 
     pub fn is_black_listed(&self) -> bool {
-        self.url.starts_with("https://catalogue.insa-rouen.fr/cgi-bin/koha/opac-search.pl")
-        || self.url.starts_with("https://qualite.insa-rouen.fr")
+        self.url
+            .starts_with("https://catalogue.insa-rouen.fr/cgi-bin/koha/opac-search.pl")
+            || self.url.starts_with("https://qualite.insa-rouen.fr")
     }
 
     pub fn is_media(&self) -> bool {
-        const MEDIAS_EXTENSIONS : [&str; 18] = ["pdf", "png", "jpg", "jpeg", "gif", "svg", "ico", "webp", "bmp", "tiff", "tif", "psd", "raw", "css", "js", "zip", "tar", "jar"];
-        if let Some(extension) = self.to_string().split('.').last().map(|ext| ext.to_lowercase()) {
+        const MEDIAS_EXTENSIONS: [&str; 18] = [
+            "pdf", "png", "jpg", "jpeg", "gif", "svg", "ico", "webp", "bmp", "tiff", "tif", "psd",
+            "raw", "css", "js", "zip", "tar", "jar",
+        ];
+        if let Some(extension) = self
+            .to_string()
+            .split('.')
+            .last()
+            .map(|ext| ext.to_lowercase())
+        {
             // Vérifier si l'extension extraite est dans le tableau des extensions de médias
-            MEDIAS_EXTENSIONS.iter().any(|&media_ext| media_ext == extension)
+            MEDIAS_EXTENSIONS
+                .iter()
+                .any(|&media_ext| media_ext == extension)
         } else {
             false
         }
-        }
+    }
     pub fn is_insa(&self) -> bool {
         self.url.contains("insa-rouen.fr")
     }
@@ -58,7 +73,7 @@ impl HackTraitVecUrlString for HashSet<Url> {
     fn to_string(&self) -> String {
         let mut string = String::new();
         for url in self.iter() {
-            string.push_str(&format!(" {};", &url.to_string()));
+            string.push_str(&format!(" {};", &url.to_owned()));
         }
         string
     }
@@ -72,7 +87,7 @@ impl Url {
         if !url.contains("://") {
             return Err(NoProtocol);
         }
-        
+
         for (i, c) in url.clone().chars().enumerate() {
             if !is_url_permissive(c as u8) {
                 url = url[..i].to_string();
@@ -80,9 +95,7 @@ impl Url {
             }
         }
 
-        let url = url
-            .trim_end_matches('/')
-            .trim_end_matches('#');
+        let url = url.trim_end_matches('/').trim_end_matches('#');
         let mut url_split = url.split("://");
         match url_split.next() {
             Some(v) => {
@@ -128,13 +141,10 @@ impl Url {
         root
     }
 
-    /// Get the file name 
+    /// Get the file name
     #[inline]
     pub fn get_file_name(&self) -> String {
-    self.url
-            .split('/')
-            .last()
-            .unwrap().to_string()
+        self.url.split('/').last().unwrap().to_string()
     }
 
     #[inline]
@@ -193,28 +203,28 @@ pub fn get_links(content: &str) -> HashSet<Url> {
         }
         if let Some(v) = content.get(end..) { links.extend(get_links(v)); }
     }
-    
+
     links
 }*/
 
 #[inline]
 fn is_url_permissive(c: u8) -> bool {
-    c.is_ascii_alphanumeric() 
-        || c == b'.' 
-        || c == b'/' 
-        || c == b'%' 
-        || c == b'?' 
-        || c == b':' 
-        || c == b'=' 
-        || c == b'-' 
-        || c == b'_' 
+    c.is_ascii_alphanumeric()
+        || c == b'.'
+        || c == b'/'
+        || c == b'%'
+        || c == b'?'
+        || c == b':'
+        || c == b'='
+        || c == b'-'
+        || c == b'_'
         || c == b'&'
 }
 
 /// Parse all the links in the content
 /// even if the link is not http or https
 /// for example: ="/path/to/file" should be parsed to "https://www.example.com/path/to/file"
-pub fn get_links(content: &str, url: Url) -> HashSet<Url> {    
+pub fn get_links(content: &str, url: Url) -> HashSet<Url> {
     let mut links = HashSet::new();
     // Matching patterns
     let mut start: usize = 0;
@@ -232,13 +242,17 @@ pub fn get_links(content: &str, url: Url) -> HashSet<Url> {
                         pattern_matching_pos = end.saturating_sub(2);
                     }
                 }
-            }    
+            }
         } else {
             // If before start is "=\""
             if let Some(url) = content.get(start..=end) {
                 let mut url = url.to_string();
-                if let Some(content) = content.get(start.saturating_sub(6)..=start.saturating_sub(1)) {
-                    if (content.ends_with("src=\"") || content.ends_with("href=\"")) && (pattern_matching_pos.saturating_sub(start) >= 6 || !pattern_matching)  {
+                if let Some(content) =
+                    content.get(start.saturating_sub(6)..=start.saturating_sub(1))
+                {
+                    if (content.ends_with("src=\"") || content.ends_with("href=\""))
+                        && (pattern_matching_pos.saturating_sub(start) >= 6 || !pattern_matching)
+                    {
                         if url.starts_with('/') {
                             url = url[1..].to_string();
                             url = format!("{}{}", host, url);
@@ -247,9 +261,9 @@ pub fn get_links(content: &str, url: Url) -> HashSet<Url> {
                         }
 
                         pattern_matching = true;
-                    } 
-                } 
-                
+                    }
+                }
+
                 if start <= end && pattern_matching {
                     if let Ok(link) = Url::parse(url) {
                         links.insert(link);
@@ -257,11 +271,11 @@ pub fn get_links(content: &str, url: Url) -> HashSet<Url> {
                 }
             }
             pattern_matching = false;
-            start = end+1;
-        }   
+            start = end + 1;
+        }
     }
     links
-} 
+}
 
 #[cfg(test)]
 mod tests {
@@ -289,11 +303,14 @@ mod tests {
         );
 
         assert_eq!(
-            get_links("https://sentry.io}", Url::parse("https://sentry.io").unwrap())
-                .iter()
-                .next()
-                .unwrap()
-                .to_string(),
+            get_links(
+                "https://sentry.io}",
+                Url::parse("https://sentry.io").unwrap()
+            )
+            .iter()
+            .next()
+            .unwrap()
+            .to_string(),
             Url::parse("https://sentry.io").unwrap().to_string()
         );
     }
@@ -344,7 +361,8 @@ mod tests {
         assert!(links.contains(&Url::parse("ftp://www.rust-lang.org").unwrap()));
 
         // Multiple links with special characters
-        let content = r#""https://www.google.com", "https://www.youtube.com", "ftp://www.rust-lang.org""#;
+        let content =
+            r#""https://www.google.com", "https://www.youtube.com", "ftp://www.rust-lang.org""#;
         let links = get_links(content, Url::parse("https://www.google.com").unwrap());
         assert_eq!(links.len(), 3);
         assert!(links.contains(&Url::parse("https://www.google.com").unwrap()));
@@ -356,7 +374,8 @@ mod tests {
         let links = get_links(content, Url::parse("https://www.google.com").unwrap());
         println!("{:?}", links);
         assert_eq!(links.len(), 1);
-        assert!(links.contains(&Url::parse("https://www.google.com?link=https://www.youtube.com").unwrap()));
+        assert!(links
+            .contains(&Url::parse("https://www.google.com?link=https://www.youtube.com").unwrap()));
     }
 
     #[test]

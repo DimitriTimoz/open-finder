@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 pub struct LinkCollection {
     insa_links: HashSet<Url>,
-    others: HashSet<Url>
+    others: HashSet<Url>,
 }
 
 impl LinkCollection {
