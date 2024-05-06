@@ -114,8 +114,13 @@ impl Content {
     pub async fn to_text(&self) -> Option<String> {
         match self.kind {
             ContentType::Html => {
-                let mut text = String::with_capacity(100);
+                let mut text = String::new();
                 txt_extractor::extract_text(&self.bytes, &mut text).await;
+                Some(text)
+            },
+            ContentType::Pdf => {
+                let mut text = String::new();
+                txt_extractor::extract_text_from_pdf(self.bytes.as_bytes(), &mut text).await;
                 Some(text)
             }
             _ => None,

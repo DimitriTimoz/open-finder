@@ -11,3 +11,10 @@ pub async fn extract_text(bytes: &str, txt: &mut String)  {
         }
     }
 }
+
+pub async fn extract_text_from_pdf(bytes: &[u8], txt: &mut String) {
+    let text = pdf_extract::extract_text_from_mem(bytes);
+    if let Ok(text) = text {
+        *txt = text;
+    }
+}
