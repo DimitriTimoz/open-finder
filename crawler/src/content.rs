@@ -1,6 +1,6 @@
-use std::{collections::HashSet, fs::File};
+use std::{collections::HashSet, path};
 
-use futures::executor::block_on;
+use futures::{executor::block_on, future::select_all, task::UnsafeFutureObj};
 use meilisearch_sdk::Client;
 use serde::{Deserialize, Serialize};
 
@@ -81,17 +81,22 @@ impl Content {
         }
     }
 
-    pub fn publish(&self, url: Url) {
+    pub fn publish(&self, urls: &[Url]) {
         block_on(async move {
-            let document = self.to_document(url).await;
+            let documents = urls
+                .iter()
+                .map(|url| self.to_document(url.clone()));
+            let documents = futures::future::join_all(documents).await;
+
             let client = Client::new("http://localhost:7700", Some("key"));
             // adding documents
             let res = client
                 .index("docs")
-                .add_documents(&[document], Some("hash"))
+                .add_documents(documents.as_slice(), Some("hash"))
                 .await;
-
-            println!("{:?}", res);
+            if res.is_err() {
+                println!("{:?}", res);
+            }
         });
     }
 
@@ -115,5 +120,19 @@ impl Content {
             }
             _ => None,
         }
+    }
+
+    pub async fn save(&self, url: Url) {
+        use std::fs::File;
+        use std::io::Write;
+        // Mkdir
+        let path = path::Path::new("data");
+        if !path.exists() {
+            std::fs::create_dir(path).unwrap();
+        }
+        let path = format!("data/{}.txt", url.to_string().replace("/", "_"));
+        let mut file = File::create(path).unwrap();
+        file.write_all(self.to_text().await.into_iter().next().unwrap().as_bytes())
+            .unwrap(); 
     }
 }

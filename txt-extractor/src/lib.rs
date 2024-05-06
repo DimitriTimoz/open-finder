@@ -10,5 +10,4 @@ pub async fn extract_text(bytes: &str, txt: &mut String)  {
             txt.push_str(t);
         }
     }
-    
 }

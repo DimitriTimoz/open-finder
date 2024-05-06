@@ -52,8 +52,8 @@ impl Url {
             false
         }
     }
-    pub fn is_insa(&self) -> bool {
-        self.url.contains("insa-rouen.fr")
+    pub fn is_moodle(&self) -> bool {
+        self.url.contains("moodle.insa-rouen.fr")
     }
 }
 

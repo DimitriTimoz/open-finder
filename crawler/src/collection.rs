@@ -92,7 +92,8 @@ impl Page {
             HashSet::<Url>::new()
         };
         if let Some(content) = self.content.as_ref() {
-            content.publish(self.url.clone());
+            content.publish(&[self.url.clone()]);
+            content.save(self.url.clone()).await;
         }
 
         self.links.remove(&self.url);
@@ -250,20 +251,19 @@ impl UrlCollection {
         init_progress_bar(self.get_links_count());
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
         let mut ongoing_requests = vec![];
-        set_progress_bar_progression(self.i);
+        set_progress_bar_progress(self.i);
         while !self.to_fetch.is_empty() || !ongoing_requests.is_empty() {
             if ongoing_requests.len() < CONCURRENT_REQUESTS {
                 while let Some(url) = self.to_fetch.pop_front() {
                     let url = url.clone();
-
                     self.known_url_hash.insert(url.get_hash());
-
                     self.i += 1;
                     if (url.get_uri_scheme() == UriScheme::Http
                         || url.get_uri_scheme() == UriScheme::Https)
                         && url.is_media()
-                        || !url.is_insa()
+                        || !url.is_moodle()
                         || url.is_black_listed()
+
                     {
                         print_progress_bar_info(
                             "Skip",
@@ -283,7 +283,7 @@ impl UrlCollection {
             std::thread::sleep(Duration::from_millis(30));
 
             if ongoing_requests.is_empty() {
-                print_progress_bar_info("Empty que", "No request", Color::Cyan, Style::Normal);
+                print_progress_bar_info("Empty queue", "No request", Color::Cyan, Style::Normal);
                 continue;
             }
 
@@ -339,7 +339,6 @@ impl UrlCollection {
 
     /// Save the graph to a file
     pub fn save_graph(&mut self) {
-        // TODO: use a database and do it in a separate thread
         // Check if the file exists and contains the header
         let mut file_fetcheds = OpenOptions::new()
             .append(true)
@@ -458,11 +457,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_login_cas() {
-        let _client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
+        let client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
 
-        // let mut page = Page::new(Url::parse("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), client).await.unwrap();
-        //if page.is_cas() {
-        //page.login_cas().await.unwrap();
-        //}
+        let mut page = Page::new(Url::parse("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), client).await.unwrap();
+        if page.is_cas() {
+            page.login_cas().await.unwrap();
+        }
     }
 }
