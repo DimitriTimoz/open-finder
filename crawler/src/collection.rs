@@ -1,14 +1,9 @@
-use futures;
+use futures::{self, lock::Mutex};
 use progress_bar::*;
 use reqwest::{Client, ClientBuilder};
 use rpassword::read_password;
 use std::{
-    collections::{HashSet, VecDeque},
-    fmt::Debug,
-    fs::{File, OpenOptions},
-    io::Write,
-    rc::Rc,
-    time::Duration,
+    collections::{HashSet, VecDeque}, fmt::Debug, fs::{self, File, OpenOptions}, io::Write, rc::Rc, sync::{atomic::{AtomicU32, Ordering}, Arc}, time::Duration
 };
 use urlencoding;
 
@@ -24,8 +19,7 @@ pub struct Page {
     referers: HashSet<Url>,
     links: HashSet<Url>,
     content: Option<Content>,
-    client: Rc<Client>,
-    text: Option<String>,
+    client: Arc<Mutex<Client>>,
     status: u16,
 }
 
@@ -44,7 +38,7 @@ impl Debug for Page {
 }
 
 impl Page {
-    pub async fn new(url: Url, client: Rc<Client>) -> Result<Self, PageError> {
+    pub async fn new(url: Url, client: Arc<Mutex<Client>>) -> Result<Self, PageError> {
         let mut page = Page {
             url: url.clone(),
             referers: HashSet::new(),
@@ -52,7 +46,6 @@ impl Page {
             content: None,
             client,
             status: 0,
-            text: None,
         };
         page.fetch().await?;
         Ok(page)
@@ -60,12 +53,13 @@ impl Page {
 
     async fn fetch(&mut self) -> Result<(), PageError> {
         let res = self
-            .client
+            .client.lock().await
             .get(&self.url.to_string())
             .send()
             .await
             .map_err(ReqwestError)?;
 
+    
         if Url::parse(res.url().to_string())
             .map_err(|_| PageError::InvalidFinalUrl)?
             .is_cas()
@@ -80,17 +74,19 @@ impl Page {
                 );
                 cas_res?;
             }
+        } else {
+            // get links from the page
+            self.status = res.status().as_u16();
+            let bytes = res.text().await.map_err(ReqwestError)?;
+            self.content = Some(Content::new(bytes, self.url.get_file_name()));
         }
 
-        // get links from the page
-        self.status = res.status().as_u16();
-        let bytes = res.text().await.map_err(ReqwestError)?;
-        self.content = Some(Content::new(bytes, self.url.get_file_name()));
         self.links = if let Some(content) = &self.content {
             content.get_links(self.url.clone())
         } else {
             HashSet::<Url>::new()
         };
+
         if let Some(content) = self.content.as_ref() {
             content.publish(&[self.url.clone()]);
             content.save(self.url.clone()).await;
@@ -108,7 +104,7 @@ impl Page {
     pub async fn login_cas(&mut self) -> Result<(), PageError> {
         // Pull the current page and get the execution
         let res = self
-            .client
+            .client.lock().await
             .get(&self.url.to_string())
             .send()
             .await
@@ -143,6 +139,7 @@ impl Page {
         });
 
         let req = self.client
+                .lock().await
                 .post(self.url.to_string())
                 .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36")
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
@@ -167,17 +164,16 @@ impl Page {
                     ("submit", "Login"),
                 ]).build().unwrap();
 
-        let res = self.client.execute(req).await.map_err(ReqwestError)?;
+        let res = self.client.lock().await.execute(req).await.map_err(ReqwestError)?;
 
         if !res.status().is_success() {
             return Err(FailedToLogin);
         }
-
         self.content = Some(Content::new(
             res.text().await.map_err(ReqwestError)?,
             self.url.get_file_name(),
         ));
-
+        print_progress_bar_final_info("CAS", "Login successful", Color::Green, Style::Bold);
         Ok(())
     }
 
@@ -197,7 +193,7 @@ impl Page {
 pub struct UrlCollection {
     to_fetch: VecDeque<Url>,
     known_url_hash: HashSet<u64>,
-    client: Rc<Client>,
+    client: Arc<Mutex<Client>>,
     #[cfg(feature = "graph")]
     last_fetch: Vec<(Url, Url)>,
     i: usize,
@@ -209,7 +205,7 @@ impl Default for UrlCollection {
         UrlCollection {
             to_fetch: VecDeque::with_capacity(2 * 1024 * 1024),
             known_url_hash: HashSet::with_capacity(7 * 1024 * 1024),
-            client: Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap()),
+            client: Arc::new(Mutex::new(ClientBuilder::new().cookie_store(true).build().unwrap())),
             i: 0,
             #[cfg(feature = "graph")]
             last_fetch: Vec::new(),
@@ -248,10 +244,54 @@ impl UrlCollection {
 
     /// Start the fetch
     pub async fn fetch(&mut self) -> Result<(), PageError> {
+
         init_progress_bar(self.get_links_count());
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
         let mut ongoing_requests = vec![];
         set_progress_bar_progress(self.i);
+
+        let package_i = AtomicU32::new(1);
+        
+        // Find the highest package number
+        let mut package_string = format!("data/package-{}.7z", package_i.load(Ordering::Acquire));
+        while std::path::Path::new(&package_string).exists() {
+            package_i.fetch_add(1, Ordering::SeqCst);
+            package_string = format!("data/package-{}.7z", package_i.load(Ordering::Acquire));
+        }
+            // Start a new thread for the compression
+        let compression_thread = std::thread::spawn(move || {
+            // Ensure the package directory exists
+            let _ = fs::create_dir(format!("data/package-{}", package_i.load(Ordering::Acquire)));
+            
+            loop {
+                // Count the number of files and their size
+                let mut size = 0;
+                let mut n_files = 0;
+                package_string = format!("data/package-{}", package_i.load(Ordering::Acquire));
+                if let Ok(entries) = fs::read_dir(&package_string) {
+                    for entry in entries.flatten() {
+                        if let Ok(metadata) = entry.metadata() {
+                            if metadata.is_file() {
+                                size += metadata.len();
+                                n_files += 1;
+                            }
+                        }
+                    }
+                }            
+                
+                // Compress the files
+                if size > 512 * 1024 * 1024 || n_files > 1_000 {
+                    package_i.fetch_add(1, Ordering::SeqCst);
+                    fs::create_dir(&format!("data/package-{}", package_i.load(Ordering::Acquire))).unwrap();
+                    let _ = sevenz_rust::compress_to_path(&package_string, &format!("data/package-{}.7z", package_i.load(Ordering::Acquire)));
+                    fs::remove_dir_all(&package_string).unwrap();
+                }
+                std::thread::sleep(Duration::from_secs(5));
+            }
+
+
+        });
+
         while !self.to_fetch.is_empty() || !ongoing_requests.is_empty() {
             if ongoing_requests.len() < CONCURRENT_REQUESTS {
                 while let Some(url) = self.to_fetch.pop_front() {
@@ -263,6 +303,7 @@ impl UrlCollection {
                         && url.is_media()
                         || !url.is_moodle()
                         || url.is_black_listed()
+                        || url.to_string().ends_with("logout")
 
                     {
                         print_progress_bar_info(
@@ -274,7 +315,7 @@ impl UrlCollection {
                         self.to_save.push((url.clone(), 0));
                         continue;
                     }
-                    ongoing_requests.push(Box::pin(Page::new(url.clone(), self.client.clone())));
+                    ongoing_requests.push(Box::pin(Page::new(url.clone(), Arc::clone(&self.client))));
                     if ongoing_requests.len() >= CONCURRENT_REQUESTS {
                         break;
                     }
@@ -457,11 +498,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_login_cas() {
-        let client = Rc::new(ClientBuilder::new().cookie_store(true).build().unwrap());
+        let client = Arc::new(Mutex::new(ClientBuilder::new().cookie_store(true).build().unwrap()));
 
         let mut page = Page::new(Url::parse("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS").unwrap(), client).await.unwrap();
-        if page.is_cas() {
-            page.login_cas().await.unwrap();
-        }
+
     }
 }

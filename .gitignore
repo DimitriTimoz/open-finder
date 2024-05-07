@@ -7,3 +7,4 @@ fetcheds.csv*
 .DS_Store
 meilisearch
 data.ms/
+data/

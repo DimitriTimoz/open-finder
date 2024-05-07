@@ -1,7 +1,7 @@
-use std::{collections::HashSet, path};
+use std::{collections::HashSet, fs, path};
 
-use futures::{executor::block_on, future::select_all, task::UnsafeFutureObj};
-use meilisearch_sdk::Client;
+use futures::executor::block_on;
+use meilisearch_sdk::client::*;
 use serde::{Deserialize, Serialize};
 
 use crate::link::{get_links, Url};
@@ -20,33 +20,41 @@ pub enum ContentType {
 
 impl ContentType {
     fn from(file_name: String, content: &str) -> Self {
-        let file_name = file_name.to_lowercase();
-        match file_name.split('.').last() {
-            Some("html") | Some("htm") => ContentType::Html,
-            Some("pdf") => ContentType::Pdf,
-            Some("png") => ContentType::Image,
-            Some("jpg") => ContentType::Image,
-            Some("jpeg") => ContentType::Image,
-            Some("gif") => ContentType::Image,
-            Some("svg") => ContentType::Image,
-            Some("ico") => ContentType::Image,
-            Some("webp") => ContentType::Image,
-            Some("bmp") => ContentType::Image,
-            Some("tiff") => ContentType::Image,
-            Some("tif") => ContentType::Image,
-            Some("psd") => ContentType::Image,
-            Some("raw") => ContentType::Image,
-            Some("css") => ContentType::Css,
-            Some("js") => ContentType::Js,
-            Some("json") => ContentType::Json,
-            Some("xml") => ContentType::Xml,
-            _ => {
-                if content.trim_start().starts_with("<!DOCTYPE html>") {
-                    ContentType::Html
-                } else {
-                    ContentType::Other
+        let mut file_name = file_name.to_lowercase();
+        if let Some(filen_name) = file_name.split('.').last() {
+            file_name = filen_name.split('?').next().unwrap_or("").to_string();
+            match file_name.as_str() {
+                "html" | "htm" => ContentType::Html,
+                "pdf" => ContentType::Pdf,
+                "png" => ContentType::Image,
+                "jpg" => ContentType::Image,
+                "jpeg" => ContentType::Image,
+                "gif" => ContentType::Image,
+                "svg" => ContentType::Image,
+                "ico" => ContentType::Image,
+                "webp" => ContentType::Image,
+                "bmp" => ContentType::Image,
+                "tiff" => ContentType::Image,
+                "tif" => ContentType::Image,
+                "psd" => ContentType::Image,
+                "raw" => ContentType::Image,
+                "css" => ContentType::Css,
+                "js" => ContentType::Js,
+                "json" => ContentType::Json,
+                "xml" => ContentType::Xml,
+                _ => {
+                    if content.trim_start().starts_with("<!DOCTYPE html>") {
+                        ContentType::Html
+                    } else {
+                        ContentType::Other
+                    }        
                 }
             }
+    
+        } else if content.trim_start().starts_with("<!DOCTYPE html>") {
+            ContentType::Html
+        } else {
+            ContentType::Other
         }
     }
 }
@@ -88,7 +96,7 @@ impl Content {
                 .map(|url| self.to_document(url.clone()));
             let documents = futures::future::join_all(documents).await;
 
-            let client = Client::new("http://localhost:7700", Some("key"));
+            let client = Client::new("http://localhost:7700", Some("key")).unwrap();
             // adding documents
             let res = client
                 .index("docs")
@@ -121,6 +129,7 @@ impl Content {
             ContentType::Pdf => {
                 let mut text = String::new();
                 txt_extractor::extract_text_from_pdf(self.bytes.as_bytes(), &mut text).await;
+                println!("{}", text);
                 Some(text)
             }
             _ => None,
@@ -135,9 +144,37 @@ impl Content {
         if !path.exists() {
             std::fs::create_dir(path).unwrap();
         }
-        let path = format!("data/{}.txt", url.to_string().replace("/", "_"));
-        let mut file = File::create(path).unwrap();
-        file.write_all(self.to_text().await.into_iter().next().unwrap().as_bytes())
-            .unwrap(); 
+
+        if let Some(bytes) = self.to_text().await.into_iter().next() {
+            if bytes.is_empty() {
+                return;
+            }
+            // Find the unique folder
+            let path = "data";  // Specify the directory path
+            let mut unique_dirs = HashSet::new();
+        
+            if let Ok(entries) = fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    if let Ok(metadata) = entry.metadata() {
+                        if metadata.is_dir() {
+                            if let Ok(file_name) = entry.file_name().into_string() {
+                                unique_dirs.insert(file_name);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let folder = unique_dirs.iter().next().unwrap();
+
+            let mut path = format!("data/{folder}/{}.txt", url.to_string().replace('/', "_"));
+            path.truncate(255);
+            let file = File::create(path);
+            if let Ok(mut file) = file  {
+                file.write_all(bytes.as_bytes())
+                    .unwrap(); 
+            }
+    
+        }
     }
 }
