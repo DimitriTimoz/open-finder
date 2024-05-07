@@ -35,8 +35,8 @@ impl Url {
 
     pub fn is_media(&self) -> bool {
         const MEDIAS_EXTENSIONS: [&str; 18] = [
-            "pdf", "png", "jpg", "jpeg", "gif", "svg", "ico", "webp", "bmp", "tiff", "tif", "psd",
-            "raw", "css", "js", "zip", "tar", "jar",
+            "png", "jpg", "jpeg", "gif", "svg", "ico", "webp", "bmp", "tiff", "tif", "psd",
+            "raw", "css", "js", "zip", "tar", "jar", "webm"
         ];
         if let Some(extension) = self
             .to_string()
@@ -53,7 +53,7 @@ impl Url {
         }
     }
     pub fn is_moodle(&self) -> bool {
-        self.url.contains("moodle.insa-rouen.fr")
+        self.url.contains("moodle.insa-rouen.fr") || self.url.contains("cas.insa-cvl.fr")
     }
 }
 
