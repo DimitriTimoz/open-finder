@@ -34,7 +34,7 @@ async fn main() {
         "{}",
         style("Please, enter a url to start crawling (nothing to start the scan or resume the current scan): ").green()
     );
-    let urls = vec![Url::parse(String::from("https://moodle.insa-rouen.fr")).unwrap(), Url::parse(String::from("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS")).unwrap()];
+    let urls = vec![Url::parse(String::from("https://cas.insa-rouen.fr/cas/login?service=https%3A%2F%2Fmoodle.insa-rouen.fr%2Flogin%2Findex.php%3FauthCAS%3DCAS")).unwrap()];
 
     let mut graph = UrlCollection::new();
     let err = if File::open("fetcheds.csv").is_ok() && File::open("to_fetch.csv").is_ok() {
