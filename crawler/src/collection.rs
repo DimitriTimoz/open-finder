@@ -77,8 +77,8 @@ impl Page {
         } else {
             // get links from the page
             self.status = res.status().as_u16();
-            let bytes = res.text().await.map_err(ReqwestError)?;
-            self.content = Some(Content::new(bytes, self.url.get_file_name()));
+            let bytes = res.bytes().await.map_err(ReqwestError)?;
+            self.content = Some(Content::new(bytes.into_iter().collect(), self.url.get_file_name()));
         }
 
         self.links = if let Some(content) = &self.content {
@@ -170,7 +170,7 @@ impl Page {
             return Err(FailedToLogin);
         }
         self.content = Some(Content::new(
-            res.text().await.map_err(ReqwestError)?,
+            res.bytes().await.into_iter().flatten().collect(),
             self.url.get_file_name(),
         ));
         print_progress_bar_final_info("CAS", "Login successful", Color::Green, Style::Bold);
@@ -303,6 +303,7 @@ impl UrlCollection {
                         && url.is_media()
                         || !url.is_moodle()
                         || url.is_black_listed()
+                        || url.to_string().contains("mailto")
                         || url.to_string().ends_with("logout")
 
                     {

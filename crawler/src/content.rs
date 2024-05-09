@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs, path};
+use std::{collections::HashSet, fs, path, str::Bytes};
 
 use futures::executor::block_on;
 use meilisearch_sdk::client::*;
@@ -19,7 +19,7 @@ pub enum ContentType {
 }
 
 impl ContentType {
-    fn from(file_name: String, content: &str) -> Self {
+    fn from(file_name: String, content: &Vec<u8>) -> Self {
         let mut file_name = file_name.to_lowercase();
         if let Some(filen_name) = file_name.split('.').last() {
             file_name = filen_name.split('?').next().unwrap_or("").to_string();
@@ -43,7 +43,7 @@ impl ContentType {
                 "json" => ContentType::Json,
                 "xml" => ContentType::Xml,
                 _ => {
-                    if content.trim_start().starts_with("<!DOCTYPE html>") {
+                    if content.starts_with(b"<!DOCTYPE html>") {
                         ContentType::Html
                     } else {
                         ContentType::Other
@@ -51,7 +51,7 @@ impl ContentType {
                 }
             }
     
-        } else if content.trim_start().starts_with("<!DOCTYPE html>") {
+        } else if content.starts_with(b"<!DOCTYPE html>") {
             ContentType::Html
         } else {
             ContentType::Other
@@ -68,12 +68,12 @@ pub struct Document {
 }
 
 pub struct Content {
-    bytes: String,
+    bytes: Vec<u8>,
     kind: ContentType,
 }
 
 impl Content {
-    pub fn new(bytes: String, name: String) -> Self {
+    pub fn new(bytes: Vec<u8>, name: String) -> Self {
         Content {
             kind: ContentType::from(name.clone(), &bytes),
             bytes,
@@ -82,10 +82,10 @@ impl Content {
 
     async fn to_document(&self, url: Url) -> Document {
         Document {
-            url,
+            url: url.clone(),
             content: self.to_text().await.unwrap_or_default(),
             kind: self.kind.clone(),
-            hash: format!("{:x}", md5::compute(&self.bytes)),
+            hash: format!("{:x}", md5::compute(url.to_string().as_bytes())),
         }
     }
 
@@ -111,11 +111,11 @@ impl Content {
     pub fn get_links(&self, url: Url) -> HashSet<Url> {
         match self.kind {
             ContentType::Pdf => HashSet::new(),
-            _ => get_links(&self.bytes, url),
+            _ => get_links(&String::from_utf8(self.bytes.clone()).unwrap_or_default(), url),
         }
     }
 
-    pub fn get_bytes(&self) -> &str {
+    pub fn get_bytes(&self) -> &Vec<u8> {
         &self.bytes
     }
 
@@ -123,13 +123,12 @@ impl Content {
         match self.kind {
             ContentType::Html => {
                 let mut text = String::new();
-                txt_extractor::extract_text(&self.bytes, &mut text).await;
+                txt_extractor::extract_text(&String::from_utf8(self.bytes.clone()).unwrap_or_default(), &mut text).await;
                 Some(text)
             },
             ContentType::Pdf => {
                 let mut text = String::new();
-                txt_extractor::extract_text_from_pdf(self.bytes.as_bytes(), &mut text).await;
-                println!("{}", text);
+                txt_extractor::extract_text_from_pdf(self.bytes.as_slice(), &mut text).await;
                 Some(text)
             }
             _ => None,
