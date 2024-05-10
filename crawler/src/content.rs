@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs, path, str::Bytes};
+use std::{collections::HashSet, fs, path};
 
 use futures::executor::block_on;
 use meilisearch_sdk::client::*;
