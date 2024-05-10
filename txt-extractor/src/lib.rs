@@ -1,3 +1,5 @@
+use std::panic;
+
 use html2text::from_read;
 
 pub async fn extract_text(bytes: &str, txt: &mut String)  {
@@ -7,9 +9,13 @@ pub async fn extract_text(bytes: &str, txt: &mut String)  {
 }
 
 pub async fn extract_text_from_pdf(bytes: &[u8], txt: &mut String) {
-    let text = pdf_extract::extract_text_from_mem(bytes);
+    // Catch unwinding panics
+    let text = panic::catch_unwind(|| {
+        pdf_extract::extract_text_from_mem(bytes)
+    });
+
     // Write it to the file
-    if let Ok(text) = text {
+    if let Ok(Ok(text)) = text {
         *txt = text;
     } else {
         println!("Error: {:?}", text);
