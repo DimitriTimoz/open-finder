@@ -205,7 +205,7 @@ impl Default for UrlCollection {
         UrlCollection {
             to_fetch: VecDeque::with_capacity(2 * 1024 * 1024),
             known_url_hash: HashSet::with_capacity(7 * 1024 * 1024),
-            client: Arc::new(Mutex::new(ClientBuilder::new().cookie_store(true).build().unwrap())),
+            client: Arc::new(Mutex::new(ClientBuilder::new().cookie_store(true).timeout(Duration::from_secs(2)).build().unwrap())),
             i: 0,
             #[cfg(feature = "graph")]
             last_fetch: Vec::new(),
@@ -248,7 +248,6 @@ impl UrlCollection {
         init_progress_bar(self.get_links_count());
         set_progress_bar_action("Fetching", Color::Green, Style::Bold);
         let mut ongoing_requests = vec![];
-        set_progress_bar_progress(self.i);
 
         let package_i = AtomicU32::new(1);
         
@@ -288,8 +287,6 @@ impl UrlCollection {
                 }
                 std::thread::sleep(Duration::from_secs(5));
             }
-
-
         });
 
         while !self.to_fetch.is_empty() || !ongoing_requests.is_empty() {
@@ -301,7 +298,7 @@ impl UrlCollection {
                     if (url.get_uri_scheme() == UriScheme::Http
                         || url.get_uri_scheme() == UriScheme::Https)
                         && url.is_media()
-                        || !url.is_moodle()
+                        || !url.is_allowed()
                         || url.is_black_listed()
                         || url.to_string().contains("mailto")
                         || url.to_string().ends_with("logout")
@@ -322,7 +319,7 @@ impl UrlCollection {
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(30));
+            std::thread::sleep(Duration::from_millis(1));
 
             if ongoing_requests.is_empty() {
                 print_progress_bar_info("Empty queue", "No request", Color::Cyan, Style::Normal);
