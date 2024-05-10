@@ -52,8 +52,8 @@ impl Url {
             false
         }
     }
-    pub fn is_moodle(&self) -> bool {
-        self.url.contains("moodle.insa-rouen.fr") || self.url.contains("cas.insa-cvl.fr")
+    pub fn is_allowed(&self) -> bool {
+        self.url.contains("insa-rouen.fr")
     }
 }
 
@@ -232,9 +232,12 @@ pub fn get_links(content: &str, url: Url) -> HashSet<Url> {
     let mut pattern_matching_pos = 0;
     let host = url.get_root();
     let path = url.to_string();
-
+    let mut has_get_param = false;
     for (end, c) in content.as_bytes().iter().enumerate() {
-        if is_url_permissive(*c) {
+        if is_url_permissive(*c) && !(c == &b'?' && has_get_param) {
+            if c == &b'?' {
+                has_get_param = true;
+            }
             if !pattern_matching {
                 if let Some(content) = content.get(end.saturating_sub(2)..=end) {
                     if content == "://" {
@@ -244,6 +247,12 @@ pub fn get_links(content: &str, url: Url) -> HashSet<Url> {
                 }
             }
         } else {
+            let end = if c == &b'?' {
+                end.saturating_sub(1)
+            } else {
+                end
+            };
+            
             // If before start is "=\""
             if let Some(url) = content.get(start..=end) {
                 let mut url = url.to_string();
@@ -270,6 +279,7 @@ pub fn get_links(content: &str, url: Url) -> HashSet<Url> {
                     }
                 }
             }
+            has_get_param = false;
             pattern_matching = false;
             start = end + 1;
         }
@@ -385,5 +395,13 @@ mod tests {
         assert_eq!(links.len(), 1);
         println!("{:?}", links);
         assert!(links.contains(&Url::parse("https://www.google.com/path/to/file").unwrap()));
+
+
+        let content = r#"<a href="/path/to/file?a?b">Google</a>"#;
+        let links = get_links(content, Url::parse("https://www.google.com").unwrap());
+        assert_eq!(links.len(), 1);
+        println!("{:?}", links);
+        assert!(links.contains(&Url::parse("https://www.google.com/path/to/file?a").unwrap()));
+
     }
 }
