@@ -41,7 +41,7 @@ impl Url {
         if let Some(extension) = self
             .to_string()
             .split('.')
-            .last()
+            .next_back()
             .map(|ext| ext.to_lowercase())
         {
             // Vérifier si l'extension extraite est dans le tableau des extensions de médias
@@ -144,7 +144,7 @@ impl Url {
     /// Get the file name
     #[inline]
     pub fn get_file_name(&self) -> String {
-        self.url.split('/').last().unwrap().to_string()
+        self.url.split('/').next_back().unwrap().to_string()
     }
 
     #[inline]

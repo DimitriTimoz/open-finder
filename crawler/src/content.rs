@@ -19,9 +19,9 @@ pub enum ContentType {
 }
 
 impl ContentType {
-    fn from(file_name: String, content: &Vec<u8>) -> Self {
+    fn from(file_name: String, content: &[u8]) -> Self {
         let mut file_name = file_name.to_lowercase();
-        if let Some(filen_name) = file_name.split('.').last() {
+        if let Some(filen_name) = file_name.split('.').next_back() {
             file_name = filen_name.split('?').next().unwrap_or("").to_string();
             match file_name.as_str() {
                 "html" | "htm" => ContentType::Html,

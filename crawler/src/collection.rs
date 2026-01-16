@@ -54,7 +54,7 @@ impl Page {
     async fn fetch(&mut self) -> Result<(), PageError> {
         let res = self
             .client.lock().await
-            .get(&self.url.to_string())
+            .get(self.url.to_string())
             .send()
             .await
             .map_err(ReqwestError)?;
@@ -88,7 +88,7 @@ impl Page {
         };
 
         if let Some(content) = self.content.as_ref() {
-            content.publish(&[self.url.clone()]);
+            content.publish(std::slice::from_ref(&self.url));
             content.save(self.url.clone()).await;
         }
 
@@ -105,7 +105,7 @@ impl Page {
         // Pull the current page and get the execution
         let res = self
             .client.lock().await
-            .get(&self.url.to_string())
+            .get(self.url.to_string())
             .send()
             .await
             .map_err(ReqwestError)?;
@@ -281,8 +281,8 @@ impl UrlCollection {
                 // Compress the files
                 if size > 512 * 1024 * 1024 || n_files > 1_000 {
                     package_i.fetch_add(1, Ordering::SeqCst);
-                    fs::create_dir(&format!("data/package-{}", package_i.load(Ordering::Acquire))).unwrap();
-                    let _ = sevenz_rust::compress_to_path(&package_string, &format!("data/package-{}.7z", package_i.load(Ordering::Acquire)));
+                    fs::create_dir(format!("data/package-{}", package_i.load(Ordering::Acquire))).unwrap();
+                    let _ = sevenz_rust::compress_to_path(&package_string, format!("data/package-{}.7z", package_i.load(Ordering::Acquire)));
                     fs::remove_dir_all(&package_string).unwrap();
                 }
                 std::thread::sleep(Duration::from_secs(5));
